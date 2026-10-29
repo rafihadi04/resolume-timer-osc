@@ -1,0 +1,13 @@
+{
+  "appId": "com.resolume.timer",
+  "productName": "Resolume Timer",
+  "directories": {
+    "output": "dist"
+  },
+  "win": {
+    "target": ["portable"]
+  },
+  "mac": {
+    "target": ["dmg", "zip"]
+  }
+}
