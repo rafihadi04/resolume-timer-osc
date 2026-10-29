@@ -1,0 +1,27 @@
+{
+  "name": "resolume-timer-osc",
+  "version": "1.0.0",
+  "description": "Resolume Arena Application Timer",
+  "main": "src/main/index.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"electron .\"",
+    "build": "vite build",
+    "start": "electron .",
+    "build:win-portable": "npm run build && electron-builder --win portable",
+    "build:release": "npm run build && electron-builder --win --mac"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "osc": "^2.4.4",
+    "axios": "^1.6.0",
+    "i18next": "^23.0.0"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3",
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "concurrently": "^8.2.2"
+  }
+}
