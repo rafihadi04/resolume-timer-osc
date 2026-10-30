@@ -131,24 +131,32 @@ async function start (options = {}) {
   }
 }
 
-async function stop () {
+function destroyOffscreenWindow () {
   isStreaming = false;
-
   if (offscreenWindow && !offscreenWindow.isDestroyed()) {
     try {
+      if (offscreenWindow.webContents && !offscreenWindow.webContents.isDestroyed()) {
+        offscreenWindow.webContents.removeAllListeners('paint');
+      }
+      offscreenWindow.removeAllListeners();
       offscreenWindow.destroy();
     } catch (_err) {}
   }
   offscreenWindow = null;
+}
+
+async function stop () {
+  destroyOffscreenWindow();
 
   if (sender) {
+    const s = sender;
+    sender = null;
     try {
-      if (typeof sender.destroy === 'function') {
-        await sender.destroy();
+      if (typeof s.destroy === 'function') {
+        await s.destroy();
       }
     } catch (_err) {}
   }
-  sender = null;
 
   return { ok: true, status: getStatus() };
 }
@@ -157,6 +165,7 @@ module.exports = {
   isAvailable,
   getStatus,
   start,
-  stop
+  stop,
+  destroyOffscreenWindow
 };
 

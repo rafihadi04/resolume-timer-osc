@@ -225,6 +225,19 @@ function createWindow () {
     mainWindow.show();
   });
 
+  mainWindow.on('close', () => {
+    ndiService.destroyOffscreenWindow();
+    ndiService.stop().catch(() => {});
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    ndiService.destroyOffscreenWindow();
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
+  });
+
   mainWindow.webContents.on('did-fail-load', (_event, code, description, url) => {
     console.error('[renderer] failed to load', code, description, url);
   });
@@ -422,7 +435,7 @@ app.whenReady().then(() => {
   createWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!mainWindow || mainWindow.isDestroyed()) {
       createWindow();
     }
   });
@@ -430,6 +443,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   oscClient.close();
+  ndiService.destroyOffscreenWindow();
   ndiService.stop().catch(() => {});
   if (powerSaveBlockerId !== null && powerSaveBlocker.isStarted(powerSaveBlockerId)) {
     powerSaveBlocker.stop(powerSaveBlockerId);
@@ -437,14 +451,19 @@ app.on('before-quit', () => {
   }
   if (remoteServer) {
     try {
+      if (typeof remoteServer.closeAllConnections === 'function') {
+        remoteServer.closeAllConnections();
+      }
       remoteServer.close();
     } catch (_error) {
       // ignore close errors
     }
+    remoteServer = null;
   }
 });
 
 app.on('window-all-closed', () => {
+  ndiService.destroyOffscreenWindow();
   if (process.platform !== 'darwin') {
     app.quit();
   }
