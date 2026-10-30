@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Resolume Timer Remote</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: #121a23;
+      --border: #243143;
+      --text: #e9f0fa;
+      --muted: #8da2bb;
+      --accent: #3ddc97;
+      --danger: #ff4d6d;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(700px 400px at 50% -10%, rgba(61, 220, 151, 0.12), transparent 60%),
+        linear-gradient(160deg, #0b0f14, #080d13);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      padding: 20px;
+      gap: 18px;
+    }
+
+    .top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand {
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 7px 11px;
+      background: rgba(13, 20, 28, 0.85);
+    }
+
+    .connection::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 0 4px rgba(255, 77, 109, 0.12);
+    }
+
+    .connection.online::before {
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(61, 220, 151, 0.14), 0 0 14px rgba(61, 220, 151, 0.7);
+    }
+
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 24px 16px;
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(18, 26, 35, 0.97), rgba(10, 15, 21, 0.97));
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
+    }
+
+    .label-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .phase, .mode {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-weight: 800;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      background: rgba(9, 14, 20, 0.7);
+    }
+
+    .timer {
+      font-family: Consolas, "SFMono-Regular", "Roboto Mono", monospace;
+      font-size: clamp(52px, 16vw, 96px);
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      text-align: center;
+      word-break: break-word;
+      color: var(--accent);
+      transition: color 120ms linear;
+    }
+
+    .progress {
+      width: 100%;
+      max-width: 520px;
+      height: 12px;
+      margin-top: 26px;
+      border-radius: 999px;
+      border: 1px solid #1b2634;
+      background: #070b10;
+      overflow: hidden;
+    }
+
+    .progress > div {
+      height: 100%;
+      width: 0;
+      border-radius: 999px;
+      background: var(--accent);
+      transition: width 200ms linear, background-color 200ms linear;
+      box-shadow: 0 0 18px currentColor;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 14px;
+      background: #141d27;
+      color: var(--text);
+      font-size: 17px;
+      font-weight: 700;
+      font-family: inherit;
+      transition: transform 90ms ease, background 140ms ease, border-color 140ms ease;
+    }
+
+    button:active {
+      transform: scale(0.97);
+    }
+
+    button.primary {
+      grid-column: 1 / -1;
+      border-color: transparent;
+      background: linear-gradient(135deg, #3ddc97, #22c98a);
+      color: #04110b;
+      box-shadow: 0 14px 34px rgba(61, 220, 151, 0.25);
+    }
+
+    button.danger {
+      border-color: rgba(255, 77, 109, 0.4);
+      color: #ffb3c1;
+      background: rgba(255, 77, 109, 0.08);
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    @media (min-width: 700px) {
+      body {
+        align-items: center;
+      }
+      .top, .panel, .controls, .hint {
+        width: min(620px, 100%);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <span class="brand">Resolume Timer Remote</span>
+    <span id="connection" class="connection">Connecting</span>
+  </div>
+
+  <div class="panel">
+    <div class="label-row">
+      <span id="phase" class="phase">Ready</span>
+      <span id="mode" class="mode">Remote</span>
+    </div>
+    <div id="timer" class="timer">00:00:00</div>
+    <div class="progress"><div id="progress"></div></div>
+  </div>
+
+  <div class="controls">
+    <button id="toggle" class="primary" type="button">Start</button>
+    <button type="button" data-action="adjust" data-seconds="60">+1 min</button>
+    <button type="button" data-action="adjust" data-seconds="-60">-1 min</button>
+    <button type="button" data-action="adjust" data-seconds="10">+10 sec</button>
+    <button type="button" data-action="adjust" data-seconds="-10">-10 sec</button>
+    <button id="reset" class="danger" type="button">Reset</button>
+  </div>
+
+  <p class="hint">Keep this phone on the same Wi-Fi/network as the timer computer.</p>
+
+  <script>
+    const timerEl = document.getElementById('timer');
+    const phaseEl = document.getElementById('phase');
+    const modeEl = document.getElementById('mode');
+    const progressEl = document.getElementById('progress');
+    const connectionEl = document.getElementById('connection');
+    const toggleEl = document.getElementById('toggle');
+
+    let lastState = null;
+
+    function sendCommand (command) {
+      fetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(command)
+      }).catch(() => {});
+    }
+
+    function render (state) {
+      lastState = state;
+      timerEl.textContent = state.text || '00:00:00';
+      timerEl.style.color = state.color || '#3ddc97';
+      phaseEl.textContent = state.phaseLabel || state.phase || 'Ready';
+      modeEl.textContent = state.modeLabel || 'Remote';
+      progressEl.style.width = Math.round((Number(state.progress) || 0) * 1000) / 10 + '%';
+      progressEl.style.backgroundColor = state.color || '#3ddc97';
+      toggleEl.textContent = state.status === 'running' ? 'Pause' : state.status === 'paused' ? 'Resume' : state.status === 'finished' ? 'Restart' : 'Start';
+      toggleEl.dataset.status = state.status || 'idle';
+      document.title = (state.text || '00:00:00') + ' - Resolume Timer';
+    }
+
+    async function poll () {
+      try {
+        const response = await fetch('/api/state', { cache: 'no-store' });
+        if (!response.ok) throw new Error('bad status');
+        render(await response.json());
+        connectionEl.textContent = 'Live';
+        connectionEl.classList.add('online');
+      } catch (_error) {
+        connectionEl.textContent = 'Offline';
+        connectionEl.classList.remove('online');
+      }
+    }
+
+    toggleEl.addEventListener('click', () => {
+      const status = lastState ? lastState.status : 'idle';
+      sendCommand({ action: status === 'running' ? 'pause' : 'start' });
+    });
+
+    document.getElementById('reset').addEventListener('click', () => {
+      sendCommand({ action: 'reset' });
+    });
+
+    document.querySelectorAll('[data-action="adjust"]').forEach((button) => {
+      button.addEventListener('click', () => {
+        sendCommand({ action: 'adjust', seconds: Number(button.dataset.seconds) });
+      });
+    });
+
+    poll();
+    setInterval(poll, 500);
+  </script>
+</body>
+</html>

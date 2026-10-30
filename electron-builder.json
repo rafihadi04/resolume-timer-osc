@@ -4,6 +4,12 @@
   "directories": {
     "output": "dist"
   },
+  "files": [
+    "dist-renderer/**/*",
+    "src/main/**/*",
+    "assets/**/*",
+    "package.json"
+  ],
   "win": {
     "target": ["portable"]
   },

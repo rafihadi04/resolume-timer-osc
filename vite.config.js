@@ -5,9 +5,15 @@ import { resolve } from 'path';
 export default defineConfig({
   plugins: [react()],
   root: resolve(__dirname, 'src/renderer'),
+  envDir: __dirname,
   base: './',
+  publicDir: resolve(__dirname, 'assets'),
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
   build: {
-    outDir: resolve(__dirname, 'dist'),
+    outDir: resolve(__dirname, 'dist-renderer'),
     emptyOutDir: true,
   },
 });
