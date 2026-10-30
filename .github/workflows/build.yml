@@ -1,17 +1,17 @@
 name: Build Electron App
 
 on:
-  push:
-    branches:
-      - main
-      - develop
+  workflow_dispatch:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   build-dev-windows:
-    name: Build Windows Portable (Development)
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    name: Build Windows Portable (Manual Dev)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-2022
     env:
       GYP_MSVS_VERSION: '2022'
@@ -58,6 +58,7 @@ jobs:
       npm_config_msvs_version: '2022'
 
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-2022, macos-latest]
 
@@ -94,5 +95,6 @@ jobs:
             dist/*.exe
             dist/*.dmg
             dist/*.zip
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
