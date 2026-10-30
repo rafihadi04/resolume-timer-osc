@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('remote:command', listener);
     return () => ipcRenderer.removeListener('remote:command', listener);
   },
+  ndiStatus: () => ipcRenderer.invoke('ndi:status'),
+  ndiStart: (options) => ipcRenderer.invoke('ndi:start', options),
+  ndiStop: () => ipcRenderer.invoke('ndi:stop'),
+  setTimerRunning: (running) => ipcRenderer.send('app:setTimerRunning', running),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
   version: () => ipcRenderer.invoke('app:version')
 });

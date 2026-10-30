@@ -12,17 +12,18 @@
     "build:release": "npm run build && electron-builder"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "@stagetimerio/grandiose": "^0.2.1",
     "i18next": "^23.0.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.0.0",
+    "concurrently": "^8.2.2",
     "electron": "^30.0.0",
     "electron-builder": "^24.13.3",
     "vite": "^5.0.0",
-    "@vitejs/plugin-react": "^4.0.0",
-    "concurrently": "^8.2.2",
     "wait-on": "^7.2.0"
   }
 }

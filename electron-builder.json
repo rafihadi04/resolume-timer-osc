@@ -8,7 +8,11 @@
     "dist-renderer/**/*",
     "src/main/**/*",
     "assets/**/*",
+    "node_modules/@stagetimerio/grandiose/**/*",
     "package.json"
+  ],
+  "asarUnpack": [
+    "**/@stagetimerio/grandiose/dist/**"
   ],
   "win": {
     "target": ["portable"]

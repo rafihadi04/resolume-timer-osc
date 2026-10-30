@@ -1,10 +1,16 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const http = require('http');
 const oscClient = require('./osc-client');
 const restClient = require('./rest-client');
+const ndiService = require('./ndi-service');
+
+// Prevent background throttling & sleep when app is minimized or unfocused
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 
 const isDev = !app.isPackaged;
 let mainWindow = null;
@@ -12,7 +18,9 @@ let remoteServer = null;
 let remotePort = null;
 let remoteState = null;
 let remoteHtmlCache = null;
+let outputHtmlCache = null;
 let remoteReadyResolve = null;
+let powerSaveBlockerId = null;
 const remoteReady = new Promise((resolve) => {
   remoteReadyResolve = resolve;
 });
@@ -42,13 +50,16 @@ function getRemoteInfo () {
   const addresses = lanAddresses();
   const host = addresses[0] || '127.0.0.1';
   const urls = remotePort ? addresses.map((address) => `http://${address}:${remotePort}/`) : [];
+  const outputUrls = remotePort ? addresses.map((address) => `http://${address}:${remotePort}/output`) : [];
 
   return {
     ready: Boolean(remotePort),
     port: remotePort,
     host,
     url: remotePort ? `http://${host}:${remotePort}/` : null,
-    urls
+    outputUrl: remotePort ? `http://${host}:${remotePort}/output` : null,
+    urls,
+    outputUrls
   };
 }
 
@@ -57,6 +68,13 @@ function getRemoteHtml () {
     remoteHtmlCache = fs.readFileSync(path.join(__dirname, 'remote.html'), 'utf8');
   }
   return remoteHtmlCache;
+}
+
+function getOutputHtml () {
+  if (!outputHtmlCache) {
+    outputHtmlCache = fs.readFileSync(path.join(__dirname, 'output.html'), 'utf8');
+  }
+  return outputHtmlCache;
 }
 
 function startRemoteServer () {
@@ -71,6 +89,19 @@ function startRemoteServer () {
       return;
     }
 
+    if (
+      req.method === 'GET' &&
+      (requestUrl.pathname === '/output' ||
+        requestUrl.pathname === '/output.html' ||
+        requestUrl.pathname === '/timer' ||
+        requestUrl.pathname === '/stage' ||
+        requestUrl.pathname === '/view')
+    ) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(getOutputHtml());
+      return;
+    }
+
     if (req.method === 'GET' && requestUrl.pathname === '/api/state') {
       res.writeHead(200, {
         'Content-Type': 'application/json',
@@ -78,6 +109,8 @@ function startRemoteServer () {
       });
       res.end(JSON.stringify(remoteState || {
         text: '00:00:00',
+        notes: '',
+        speed: 1,
         phase: 'ready',
         phaseLabel: 'Ready',
         modeLabel: '',
@@ -94,7 +127,7 @@ function startRemoteServer () {
       let body = '';
       req.on('data', (chunk) => {
         body += chunk;
-        if (body.length > 2048) req.destroy();
+        if (body.length > 8192) req.destroy();
       });
       req.on('end', () => {
         let command;
@@ -106,7 +139,7 @@ function startRemoteServer () {
           return;
         }
 
-        const allowed = ['toggle', 'start', 'pause', 'reset', 'adjust'];
+        const allowed = ['toggle', 'start', 'pause', 'reset', 'adjust', 'setSpeed', 'setNotes'];
         if (!allowed.includes(command.action)) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'invalid action' }));
@@ -121,6 +154,20 @@ function startRemoteServer () {
             return;
           }
           command.seconds = seconds;
+        }
+
+        if (command.action === 'setSpeed') {
+          const speed = Number(command.speed);
+          if (!Number.isFinite(speed) || speed <= 0 || speed > 20) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'invalid speed' }));
+            return;
+          }
+          command.speed = speed;
+        }
+
+        if (command.action === 'setNotes') {
+          command.notes = String(command.notes !== undefined ? command.notes : '');
         }
 
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -169,7 +216,8 @@ function createWindow () {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      backgroundThrottling: false
     }
   });
 
@@ -332,6 +380,31 @@ function registerIpc () {
     remoteState = { ...(state || {}), updatedAt: Date.now() };
   });
 
+  ipcMain.on('app:setTimerRunning', (_event, running) => {
+    if (running) {
+      if (powerSaveBlockerId === null || !powerSaveBlocker.isStarted(powerSaveBlockerId)) {
+        powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+      }
+    } else {
+      if (powerSaveBlockerId !== null && powerSaveBlocker.isStarted(powerSaveBlockerId)) {
+        powerSaveBlocker.stop(powerSaveBlockerId);
+        powerSaveBlockerId = null;
+      }
+    }
+  });
+
+  ipcMain.handle('ndi:status', async () => {
+    return ndiService.getStatus();
+  });
+
+  ipcMain.handle('ndi:start', async (_event, options = {}) => {
+    return ndiService.start({ ...options, port: remotePort });
+  });
+
+  ipcMain.handle('ndi:stop', async () => {
+    return ndiService.stop();
+  });
+
   ipcMain.handle('app:openExternal', async (_event, url) => {
     if (/^https?:\/\//i.test(String(url))) {
       await shell.openExternal(String(url));
@@ -357,6 +430,11 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   oscClient.close();
+  ndiService.stop().catch(() => {});
+  if (powerSaveBlockerId !== null && powerSaveBlocker.isStarted(powerSaveBlockerId)) {
+    powerSaveBlocker.stop(powerSaveBlockerId);
+    powerSaveBlockerId = null;
+  }
   if (remoteServer) {
     try {
       remoteServer.close();

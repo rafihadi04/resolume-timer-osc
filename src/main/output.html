@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resolume Timer - Live Output</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --card-bg: rgba(18, 26, 35, 0.85);
+      --border: #243143;
+      --text: #ffffff;
+      --muted: #8da2bb;
+      --accent: #3ddc97;
+      --danger: #ff4d6d;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+    }
+
+    body.transparent {
+      background-color: transparent !important;
+      background: transparent !important;
+    }
+
+    .output-container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: clamp(16px, 4vw, 48px);
+      gap: clamp(12px, 3vh, 32px);
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 1400px;
+      font-size: clamp(12px, 1.8vw, 20px);
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .phase-badge {
+      padding: 6px 16px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      transition: color 150ms ease, border-color 150ms ease;
+    }
+
+    .speed-badge {
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--muted);
+    }
+
+    .timer-card {
+      width: 100%;
+      max-width: 1400px;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      border-radius: 28px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+      padding: clamp(16px, 4vh, 48px) clamp(16px, 4vw, 48px);
+      position: relative;
+    }
+
+    body.transparent .timer-card {
+      background: rgba(11, 15, 20, 0.88);
+      backdrop-filter: blur(8px);
+    }
+
+    .timer-text {
+      font-family: Consolas, "SFMono-Regular", "Roboto Mono", "Courier New", monospace;
+      font-size: clamp(64px, 20vw, 220px);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      font-variant-numeric: tabular-nums;
+      text-align: center;
+      color: var(--accent);
+      transition: color 120ms ease;
+      text-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+      user-select: none;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      max-width: 1100px;
+      height: clamp(8px, 1.6vh, 18px);
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      margin-top: clamp(16px, 3vh, 32px);
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background-color: var(--accent);
+      border-radius: 999px;
+      transition: width 200ms linear, background-color 200ms ease;
+      box-shadow: 0 0 20px currentColor;
+    }
+
+    .notes-card {
+      width: 100%;
+      max-width: 1400px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: clamp(14px, 2.5vh, 28px) clamp(18px, 3vw, 36px);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+      max-height: 35vh;
+      overflow-y: auto;
+    }
+
+    body.transparent .notes-card {
+      background: rgba(11, 15, 20, 0.88);
+      backdrop-filter: blur(8px);
+    }
+
+    .notes-card.hidden {
+      display: none !important;
+    }
+
+    .notes-header {
+      font-size: clamp(11px, 1.4vw, 15px);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .notes-content {
+      font-size: clamp(18px, 2.8vw, 36px);
+      font-weight: 600;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      background-color: var(--danger);
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .status-dot.connected {
+      background-color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="output-container">
+    <div class="top-bar" id="topBar">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="phaseBadge" class="phase-badge">READY</span>
+        <span id="modeLabel" style="font-size: 0.9em; opacity: 0.8;"></span>
+      </div>
+      <div>
+        <span id="speedBadge" class="speed-badge">1.0x</span>
+      </div>
+    </div>
+
+    <div class="timer-card" id="timerCard">
+      <div id="timerText" class="timer-text">00:00:00</div>
+      <div class="progress-bar-container" id="progressContainer">
+        <div class="progress-bar-fill" id="progressBar"></div>
+      </div>
+    </div>
+
+    <div class="notes-card" id="notesCard">
+      <div class="notes-header">
+        <span>Speaker & Stage Notes</span>
+      </div>
+      <div class="notes-content" id="notesContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('transparent') === '1' || urlParams.get('bg') === 'transparent') {
+      document.body.classList.add('transparent');
+    }
+    const hideNotes = urlParams.get('notes') === 'hide';
+    const hideProgress = urlParams.get('progress') === 'hide';
+    const hideTopBar = urlParams.get('top') === 'hide';
+
+    if (hideTopBar) document.getElementById('topBar').style.display = 'none';
+    if (hideProgress) document.getElementById('progressContainer').style.display = 'none';
+
+    const timerEl = document.getElementById('timerText');
+    const phaseEl = document.getElementById('phaseBadge');
+    const modeEl = document.getElementById('modeLabel');
+    const speedEl = document.getElementById('speedBadge');
+    const progressEl = document.getElementById('progressBar');
+    const statusDotEl = document.getElementById('statusDot');
+    const notesCardEl = document.getElementById('notesCard');
+    const notesContentEl = document.getElementById('notesContent');
+
+    let isOnline = false;
+
+    function renderState(state) {
+      timerEl.textContent = state.text || '00:00:00';
+      const color = state.color || '#3ddc97';
+      timerEl.style.color = color;
+      phaseEl.style.borderColor = color;
+      phaseEl.style.color = color;
+      phaseEl.textContent = state.phaseLabel || state.phase || 'READY';
+      modeEl.textContent = state.modeLabel || '';
+
+      const speedVal = state.speed || 1;
+      speedEl.textContent = Number(speedVal).toFixed(speedVal % 1 === 0 ? 1 : 2) + 'x';
+      speedEl.style.display = speedVal === 1 ? 'none' : 'inline-block';
+
+      const progress = Math.min(1, Math.max(0, Number(state.progress) || 0));
+      progressEl.style.width = (progress * 100).toFixed(1) + '%';
+      progressEl.style.backgroundColor = color;
+
+      const notes = (state.notes || '').trim();
+      if (!hideNotes && notes.length > 0) {
+        notesContentEl.textContent = notes;
+        notesCardEl.classList.remove('hidden');
+      } else {
+        notesCardEl.classList.add('hidden');
+      }
+
+      document.title = (state.text || '00:00:00') + ' - Resolume Timer';
+    }
+
+    async function poll() {
+      try {
+        const response = await fetch('/api/state', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Bad status');
+        const state = await response.json();
+        renderState(state);
+        if (!isOnline) {
+          isOnline = true;
+          statusDotEl.classList.add('connected');
+        }
+      } catch (_err) {
+        if (isOnline) {
+          isOnline = false;
+          statusDotEl.classList.remove('connected');
+        }
+      }
+    }
+
+    poll();
+    setInterval(poll, 250);
+  </script>
+</body>
+</html>
+

@@ -10,6 +10,13 @@ Built with Electron + React + Vite. Verified against **Resolume Arena 7.28** on 
 
 - **Three timer modes** — countdown, count-up, countdown then overtime (`+00:02:15`).
 - **Live Resolume output** — finds Text Block sources and Text Block effects anywhere in the composition and streams the timer text to them.
+- **Notes Output with 2 modes**:
+  - **Mode 1 (`\n` on timer)** — Appends speaker/stage notes to the timer string separated by a newline on the same Text Block.
+  - **Mode 2 (Separate Text Block)** — Scans the composition and pushes notes to a separate Text Block target in Resolume.
+- **NDI Output** — Broadcasts the live timer, color state, and notes as a high-definition NDI network video stream (NDI 6 SDK native addon) for OBS Studio, vMix, Tricaster, or Resolume Arena. Supports transparency and configurable framerates.
+- **Website Timer Output with notes (`/output`)** — Full-screen responsive web display for stage confidence monitors, presenter displays, or OBS/Resolume browser sources. Supports `?transparent=1` for video overlays.
+- **Synchronized Phone Remote** — LAN remote controller now synchronizes both playback speed (0.5x–2.0x) and live stage notes editing between mobile devices and desktop.
+- **Rock-solid Background Running** — Timer never stops, freezes, or desyncs when minimized or running in the background. Configured with Chromium background throttling bypass, timestamp delta tracking, and OS sleep prevention.
 - **REST + OSC** — Auto / REST only / OSC only. REST is the verified transport; OSC is a fallback and is sent only when enabled in Resolume preferences.
 - **Color sync** — pushes the running / warning / timeout color to the Text Block `Color` parameter.
 - **Time's up actions** — optionally triggers a clip, a column, or a group column when the timer hits zero. Disabled by default.
@@ -18,7 +25,6 @@ Built with Electron + React + Vite. Verified against **Resolume Arena 7.28** on 
 - **Speed remapping** — 0.25x to 2.0x or a custom multiplier.
 - **Presets** — save, edit, load, delete, export, import.
 - **Languages** — English and Bahasa Indonesia.
-- **Phone remote** — an HTTP server on a free LAN port with a QR code, so a phone can start/pause/reset and adjust the timer.
 - **Donate** — QRIS-only donation QR.
 
 ---
@@ -134,8 +140,30 @@ The main process starts an HTTP server on an OS-assigned free port and the **Rem
 
 - Phone must be on the same Wi-Fi / LAN as the computer.
 - Allow the app through Windows Firewall if the page does not load.
-- The remote page mirrors the timer (text, phase, mode, progress) and can start/pause, reset, and adjust by ±1 min / ±10 sec.
-- If more than one network interface exists, the modal lists the alternate addresses.
+- The remote page mirrors the timer (text, phase, mode, progress, speed, notes) and can start/pause, reset, adjust by ±1 min / ±10 sec, change playback speed, and edit stage notes live.
+- If more than one network interface exists, the modal lists alternate addresses.
+- The **Remote Access Modal** includes tabs for both the **Remote Controller** (`/`) and the **Website Timer Output** (`/output`).
+
+---
+
+## Website Timer Output (`/output`)
+
+The application serves a dedicated, full-screen stage and confidence monitor display at `http://<lan-ip>:<port>/output` (or `/stage`, `/timer`, `/view`):
+
+- **Clean stage display** — Large high-contrast digits, active color indication, mode/phase badge, progress bar, and speaker notes section.
+- **Video switcher & OBS overlay** — Append `?transparent=1` for a transparent background.
+- **Customizable view** — Use `?notes=hide` to hide notes, or `?top=hide` for minimal timer only.
+
+---
+
+## NDI Output
+
+Broadcasts the timer and notes as an NDI video feed across the local network:
+
+- Enabled in the **Resolume Output** panel under **NDI Output**.
+- Uses native Vizrt/NewTek NDI 6 SDK.
+- Automatically detected by Resolume Arena, OBS Studio, vMix, and Tricaster as a network video source.
+- Configurable stream name, framerate (30 / 60 FPS), and alpha transparency.
 
 ---
 
@@ -144,19 +172,21 @@ The main process starts an HTTP server on an OS-assigned free port and the **Rem
 ```text
 src/
 ├── main/
-│   ├── index.js          Electron main process, IPC, LAN remote server
+│   ├── index.js          Electron main process, IPC, LAN remote server, power saver
 │   ├── preload.js        contextBridge API
+│   ├── ndi-service.js    NDI 6 SDK broadcast service & offscreen renderer
 │   ├── osc-client.js     OSC UDP encoder
-│   ├── remote.html       Phone remote page
+│   ├── remote.html       Phone remote controller page (with speed & notes)
+│   ├── output.html       Full-screen web timer output with notes
 │   └── rest-client.js    Resolume discovery and updates
 └── renderer/
     ├── main.jsx          React entry point
-    ├── App.jsx           UI and state
+    ├── App.jsx           UI and state management
     ├── styles.css
     ├── i18n.js
-    ├── hooks/useTimer.js
+    ├── hooks/useTimer.js Background-safe precision timer hook
     ├── lib/              time formatting, QR helper
-    ├── components/       Timer, controls, Resolume panel, presets, modals
+    ├── components/       Timer, controls, Resolume & NDI settings, presets, modals
     └── locales/          en.json, id.json
 ```
 

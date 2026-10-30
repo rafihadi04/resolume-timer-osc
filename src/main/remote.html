@@ -33,8 +33,8 @@
       display: flex;
       flex-direction: column;
       align-items: stretch;
-      padding: 20px;
-      gap: 18px;
+      padding: 16px;
+      gap: 16px;
     }
 
     .top {
@@ -60,7 +60,7 @@
       color: var(--muted);
       border: 1px solid var(--border);
       border-radius: 999px;
-      padding: 7px 11px;
+      padding: 6px 12px;
       background: rgba(13, 20, 28, 0.85);
     }
 
@@ -79,7 +79,6 @@
     }
 
     .panel {
-      flex: 1;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -94,18 +93,18 @@
     .label-row {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 16px;
+      gap: 8px;
+      margin-bottom: 14px;
       flex-wrap: wrap;
       justify-content: center;
     }
 
-    .phase, .mode {
+    .phase, .mode, .speed-tag {
       font-size: 11px;
       text-transform: uppercase;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.12em;
       font-weight: 800;
-      padding: 7px 12px;
+      padding: 5px 10px;
       border-radius: 999px;
       border: 1px solid var(--border);
       color: var(--muted);
@@ -114,7 +113,7 @@
 
     .timer {
       font-family: Consolas, "SFMono-Regular", "Roboto Mono", monospace;
-      font-size: clamp(52px, 16vw, 96px);
+      font-size: clamp(48px, 15vw, 84px);
       font-weight: 700;
       letter-spacing: 0.03em;
       font-variant-numeric: tabular-nums;
@@ -128,8 +127,8 @@
     .progress {
       width: 100%;
       max-width: 520px;
-      height: 12px;
-      margin-top: 26px;
+      height: 10px;
+      margin-top: 20px;
       border-radius: 999px;
       border: 1px solid #1b2634;
       background: #070b10;
@@ -148,18 +147,19 @@
     .controls {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      gap: 10px;
     }
 
     button {
       border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 20px 14px;
+      border-radius: 14px;
+      padding: 16px 12px;
       background: #141d27;
       color: var(--text);
-      font-size: 17px;
+      font-size: 16px;
       font-weight: 700;
       font-family: inherit;
+      cursor: pointer;
       transition: transform 90ms ease, background 140ms ease, border-color 140ms ease;
     }
 
@@ -172,13 +172,90 @@
       border-color: transparent;
       background: linear-gradient(135deg, #3ddc97, #22c98a);
       color: #04110b;
-      box-shadow: 0 14px 34px rgba(61, 220, 151, 0.25);
+      box-shadow: 0 10px 25px rgba(61, 220, 151, 0.22);
+      font-size: 18px;
     }
 
     button.danger {
       border-color: rgba(255, 77, 109, 0.4);
       color: #ffb3c1;
       background: rgba(255, 77, 109, 0.08);
+    }
+
+    /* Section styling */
+    .section-card {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: rgba(18, 26, 35, 0.92);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .speed-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+    }
+
+    .speed-btn {
+      padding: 10px 4px;
+      font-size: 13px;
+      font-weight: 700;
+      border-radius: 10px;
+      background: #10161f;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+
+    .speed-btn.active {
+      background: var(--accent);
+      color: #04110b;
+      border-color: var(--accent);
+    }
+
+    .notes-box {
+      width: 100%;
+      background: #090e14;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 10px;
+      resize: vertical;
+      min-height: 70px;
+      box-sizing: border-box;
+      line-height: 1.4;
+    }
+
+    .notes-box:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .notes-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .btn-small {
+      padding: 8px 14px;
+      font-size: 13px;
+      border-radius: 10px;
     }
 
     .hint {
@@ -188,12 +265,12 @@
       line-height: 1.5;
     }
 
-    @media (min-width: 700px) {
+    @media (min-width: 650px) {
       body {
         align-items: center;
       }
-      .top, .panel, .controls, .hint {
-        width: min(620px, 100%);
+      .top, .panel, .controls, .section-card, .hint {
+        width: min(580px, 100%);
       }
     }
   </style>
@@ -208,6 +285,7 @@
     <div class="label-row">
       <span id="phase" class="phase">Ready</span>
       <span id="mode" class="mode">Remote</span>
+      <span id="speedTag" class="speed-tag" style="display: none;">1.0x</span>
     </div>
     <div id="timer" class="timer">00:00:00</div>
     <div class="progress"><div id="progress"></div></div>
@@ -222,17 +300,51 @@
     <button id="reset" class="danger" type="button">Reset</button>
   </div>
 
+  <!-- Speed control section -->
+  <div class="section-card">
+    <div class="section-title">
+      <span>Playback Speed</span>
+      <span id="currentSpeedLabel" style="color: var(--text);">1.0x</span>
+    </div>
+    <div class="speed-grid">
+      <button type="button" class="speed-btn" data-speed="0.5">0.5x</button>
+      <button type="button" class="speed-btn active" data-speed="1">1.0x</button>
+      <button type="button" class="speed-btn" data-speed="1.25">1.25x</button>
+      <button type="button" class="speed-btn" data-speed="1.5">1.5x</button>
+      <button type="button" class="speed-btn" data-speed="2">2.0x</button>
+    </div>
+  </div>
+
+  <!-- Notes section -->
+  <div class="section-card">
+    <div class="section-title">
+      <span>Stage / Speaker Notes</span>
+      <span id="notesStatus" style="font-size: 10px; font-weight: normal;"></span>
+    </div>
+    <textarea id="notesInput" class="notes-box" placeholder="Type notes for the stage, speaker, or Resolume..."></textarea>
+    <div class="notes-actions">
+      <button id="applyNotesBtn" type="button" class="btn-small" style="background: var(--accent); color: #04110b; border-color: transparent;">Apply Notes</button>
+    </div>
+  </div>
+
   <p class="hint">Keep this phone on the same Wi-Fi/network as the timer computer.</p>
 
   <script>
     const timerEl = document.getElementById('timer');
     const phaseEl = document.getElementById('phase');
     const modeEl = document.getElementById('mode');
+    const speedTagEl = document.getElementById('speedTag');
+    const currentSpeedLabelEl = document.getElementById('currentSpeedLabel');
     const progressEl = document.getElementById('progress');
     const connectionEl = document.getElementById('connection');
     const toggleEl = document.getElementById('toggle');
+    const notesInputEl = document.getElementById('notesInput');
+    const notesStatusEl = document.getElementById('notesStatus');
+    const applyNotesBtn = document.getElementById('applyNotesBtn');
+    const speedButtons = document.querySelectorAll('.speed-btn');
 
     let lastState = null;
+    let isEditingNotes = false;
 
     function sendCommand (command) {
       fetch('/api/command', {
@@ -248,6 +360,25 @@
       timerEl.style.color = state.color || '#3ddc97';
       phaseEl.textContent = state.phaseLabel || state.phase || 'Ready';
       modeEl.textContent = state.modeLabel || 'Remote';
+
+      const currentSpeed = Number(state.speed) || 1;
+      currentSpeedLabelEl.textContent = currentSpeed.toFixed(currentSpeed % 1 === 0 ? 1 : 2) + 'x';
+      if (currentSpeed !== 1) {
+        speedTagEl.textContent = currentSpeed.toFixed(1) + 'x';
+        speedTagEl.style.display = 'inline-block';
+      } else {
+        speedTagEl.style.display = 'none';
+      }
+
+      speedButtons.forEach((btn) => {
+        const btnSpeed = Number(btn.dataset.speed);
+        btn.classList.toggle('active', Math.abs(btnSpeed - currentSpeed) < 0.01);
+      });
+
+      if (!isEditingNotes && document.activeElement !== notesInputEl) {
+        notesInputEl.value = state.notes || '';
+      }
+
       progressEl.style.width = Math.round((Number(state.progress) || 0) * 1000) / 10 + '%';
       progressEl.style.backgroundColor = state.color || '#3ddc97';
       toggleEl.textContent = state.status === 'running' ? 'Pause' : state.status === 'paused' ? 'Resume' : state.status === 'finished' ? 'Restart' : 'Start';
@@ -283,8 +414,39 @@
       });
     });
 
+    speedButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const speed = Number(button.dataset.speed);
+        if (Number.isFinite(speed) && speed > 0) {
+          sendCommand({ action: 'setSpeed', speed });
+        }
+      });
+    });
+
+    notesInputEl.addEventListener('focus', () => {
+      isEditingNotes = true;
+      notesStatusEl.textContent = 'Editing...';
+    });
+
+    notesInputEl.addEventListener('blur', () => {
+      setTimeout(() => {
+        isEditingNotes = false;
+        notesStatusEl.textContent = '';
+      }, 5000);
+    });
+
+    applyNotesBtn.addEventListener('click', () => {
+      const notes = notesInputEl.value;
+      sendCommand({ action: 'setNotes', notes });
+      notesStatusEl.textContent = 'Updated!';
+      isEditingNotes = false;
+      setTimeout(() => {
+        notesStatusEl.textContent = '';
+      }, 2000);
+    });
+
     poll();
-    setInterval(poll, 500);
+    setInterval(poll, 400);
   </script>
 </body>
 </html>

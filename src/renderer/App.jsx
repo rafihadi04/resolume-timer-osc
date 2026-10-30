@@ -21,7 +21,10 @@ const DEFAULT_CONFIG = {
   },
   timesUpMessage: "TIME'S UP",
   flashEnabled: true,
-  flashHz: 2
+  flashHz: 2,
+  notes: '',
+  notesMode: 'append', // 'append' (\n on timer) or 'separate' (different text block)
+  notesTargetId: null
 };
 
 const DEFAULT_SETTINGS = {
@@ -38,6 +41,13 @@ const DEFAULT_SETTINGS = {
     layer: 1,
     column: 1,
     group: 1
+  },
+  ndi: {
+    enabled: false,
+    name: 'Resolume Arena Timer',
+    fps: 30,
+    transparent: true,
+    includeNotes: true
   }
 };
 
@@ -65,6 +75,9 @@ function loadConfig () {
   return {
     ...DEFAULT_CONFIG,
     ...timing,
+    notes: saved.notes !== undefined ? saved.notes : DEFAULT_CONFIG.notes,
+    notesMode: saved.notesMode || DEFAULT_CONFIG.notesMode,
+    notesTargetId: saved.notesTargetId || DEFAULT_CONFIG.notesTargetId,
     colorScheme: { ...DEFAULT_CONFIG.colorScheme, ...(saved.colorScheme || {}) }
   };
 }
@@ -78,6 +91,10 @@ function loadSettings () {
     timeUpTrigger: {
       ...DEFAULT_SETTINGS.timeUpTrigger,
       ...(saved.timeUpTrigger || {})
+    },
+    ndi: {
+      ...DEFAULT_SETTINGS.ndi,
+      ...(saved.ndi || {})
     }
   };
 }
@@ -105,6 +122,9 @@ function normalizePreset (preset) {
     timesUpMessage: String(preset.timesUpMessage || "TIME'S UP"),
     flashEnabled: preset.flashEnabled !== false,
     flashHz: Math.min(10, Math.max(0.5, Number(preset.flashHz) || 2)),
+    notes: String(preset.notes || ''),
+    notesMode: preset.notesMode === 'separate' ? 'separate' : 'append',
+    notesTargetId: preset.notesTargetId || null,
     colorScheme: {
       ...DEFAULT_CONFIG.colorScheme,
       ...(preset.colorScheme || {})
@@ -141,12 +161,14 @@ export default function App () {
   const [presetImportError, setPresetImportError] = useState(false);
   const [health, setHealth] = useState(null);
   const [lastPush, setLastPush] = useState(null);
+  const [lastNotesPush, setLastNotesPush] = useState(null);
   const [lastTrigger, setLastTrigger] = useState(null);
   const [presets, setPresets] = useState(loadPresets);
   const [language, setLanguage] = useState(loadLanguage);
   const [donateOpen, setDonateOpen] = useState(false);
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [remoteInfo, setRemoteInfo] = useState(null);
+  const [ndiStatus, setNdiStatus] = useState(null);
   const [version, setVersion] = useState('');
 
   const didAutoScan = useRef(false);
@@ -156,6 +178,10 @@ export default function App () {
   const timer = useTimer(config);
 
   const t = useCallback((key, options) => i18n.t(key, options), [language]);
+
+  const updateConfig = useCallback((patch) => {
+    setConfig((previous) => ({ ...previous, ...patch }));
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem('rt.config', JSON.stringify(config));
@@ -192,6 +218,38 @@ export default function App () {
     }
   }, []);
 
+  // Background running power save sync (prevents OS sleep while running)
+  useEffect(() => {
+    if (window.api && window.api.setTimerRunning) {
+      window.api.setTimerRunning(timer.status === 'running');
+    }
+  }, [timer.status]);
+
+  // NDI status check
+  useEffect(() => {
+    if (window.api && window.api.ndiStatus) {
+      window.api.ndiStatus().then(setNdiStatus).catch(() => {});
+    }
+  }, []);
+
+  const handleToggleNdi = useCallback(async (enable, customNdiConfig) => {
+    if (!window.api) return;
+    const cfg = customNdiConfig || settings.ndi;
+    try {
+      if (enable) {
+        const result = await window.api.ndiStart(cfg);
+        if (result && result.status) setNdiStatus(result.status);
+      } else {
+        const result = await window.api.ndiStop();
+        if (result && result.status) setNdiStatus(result.status);
+      }
+    } catch (_err) {
+      if (window.api.ndiStatus) {
+        window.api.ndiStatus().then(setNdiStatus).catch(() => {});
+      }
+    }
+  }, [settings.ndi]);
+
   const refreshRemoteInfo = useCallback(async () => {
     if (!window.api || !window.api.remoteInfo) return;
     try {
@@ -209,6 +267,7 @@ export default function App () {
     if (remoteOpen) refreshRemoteInfo();
   }, [remoteOpen, refreshRemoteInfo]);
 
+  // Handle incoming commands from phone remote controller
   useEffect(() => {
     if (!window.api || !window.api.onRemoteCommand) return undefined;
 
@@ -219,8 +278,10 @@ export default function App () {
       else if (command.action === 'pause') timer.pause();
       else if (command.action === 'reset') timer.reset();
       else if (command.action === 'adjust') timer.adjust(Number(command.seconds) || 0);
+      else if (command.action === 'setSpeed') updateConfig({ speedMultiplier: Number(command.speed) || 1 });
+      else if (command.action === 'setNotes') updateConfig({ notes: String(command.notes || '') });
     });
-  }, [timer.toggle, timer.start, timer.pause, timer.reset, timer.adjust]);
+  }, [timer.toggle, timer.start, timer.pause, timer.reset, timer.adjust, updateConfig]);
 
   const scanComposition = useCallback(async (options = {}) => {
     if (!window.api || !window.api.discover) return;
@@ -289,7 +350,15 @@ export default function App () {
     plus: timer.isOvertime
   });
   const timesUpText = config.timesUpMessage || "TIME'S UP";
-  const outputText = flashOn ? timerText : timesUpText;
+  const rawTimerOutput = flashOn ? timerText : timesUpText;
+
+  // Mode 1: \n on timer Text Block
+  const effectiveTimerOutput =
+    config.notesMode === 'append' && (config.notes || '').trim()
+      ? `${rawTimerOutput}\n${(config.notes || '').trim()}`
+      : rawTimerOutput;
+
+  const selectedNotesTarget = targets.find((t) => t.id === config.notesTargetId) || null;
 
   const activeColor = timer.isTimeOut
     ? config.colorScheme.timeout
@@ -301,8 +370,11 @@ export default function App () {
   const modeLabel = t(`mode.${MODE_KEY[config.mode] || 'countdown'}`);
   const healthLevel = healthLevelFor(health);
 
+  // Sync state to phone remote and web output
   remoteStateRef.current = {
-    text: outputText,
+    text: rawTimerOutput,
+    notes: config.notes || '',
+    speed: config.speedMultiplier || 1,
     phase: timer.phase,
     phaseLabel,
     modeLabel,
@@ -320,6 +392,7 @@ export default function App () {
     return () => clearInterval(interval);
   }, []);
 
+  // Push timer text to Resolume (effectiveTimerOutput includes \n notes in Mode 1)
   useEffect(() => {
     if (!settings.enabled || !selectedTarget) return undefined;
     if (!window.api || !window.api.pushText) return undefined;
@@ -331,7 +404,7 @@ export default function App () {
         const result = await window.api.pushText({
           settings,
           target: selectedTarget,
-          text: outputText
+          text: effectiveTimerOutput
         });
         if (!cancelled) {
           setLastPush({
@@ -357,7 +430,7 @@ export default function App () {
       cancelled = true;
     };
   }, [
-    outputText,
+    effectiveTimerOutput,
     settings.enabled,
     settings.sendMode,
     settings.host,
@@ -368,6 +441,56 @@ export default function App () {
     t
   ]);
 
+  // Mode 2: Push notes to separate Text Block target
+  useEffect(() => {
+    if (!settings.enabled || config.notesMode !== 'separate' || !selectedNotesTarget) return undefined;
+    if (!window.api || !window.api.pushText) return undefined;
+
+    let cancelled = false;
+
+    const sendNotes = async () => {
+      try {
+        const result = await window.api.pushText({
+          settings,
+          target: selectedNotesTarget,
+          text: (config.notes || '').trim()
+        });
+        if (!cancelled) {
+          setLastNotesPush({
+            ok: Boolean(result.ok),
+            label: pushLabel(result, t),
+            at: Date.now()
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLastNotesPush({
+            ok: false,
+            label: `${t('resolume.error')} · ${error.message}`,
+            at: Date.now()
+          });
+        }
+      }
+    };
+
+    sendNotes();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    config.notes,
+    config.notesMode,
+    selectedNotesTarget,
+    settings.enabled,
+    settings.sendMode,
+    settings.host,
+    settings.restPort,
+    settings.oscHost,
+    settings.oscPort,
+    t
+  ]);
+
+  // Color sync to Resolume
   useEffect(() => {
     if (!settings.enabled || settings.syncColor === false) return undefined;
     if (!selectedTarget || !selectedTarget.colorParamId) return undefined;
@@ -416,6 +539,7 @@ export default function App () {
     t
   ]);
 
+  // Time's up trigger
   useEffect(() => {
     if (!timer.isTimeOut) {
       timeUpTriggeredRef.current = false;
@@ -444,10 +568,6 @@ export default function App () {
     });
   }, [timer.isTimeOut, timer.status, settings.timeUpTrigger, settings.host, settings.restPort, t]);
 
-  const updateConfig = useCallback((patch) => {
-    setConfig((previous) => ({ ...previous, ...patch }));
-  }, []);
-
   const updateColor = useCallback((key, value) => {
     setConfig((previous) => ({
       ...previous,
@@ -460,6 +580,9 @@ export default function App () {
       const next = { ...previous, ...patch };
       if (patch && patch.timeUpTrigger) {
         next.timeUpTrigger = { ...previous.timeUpTrigger, ...patch.timeUpTrigger };
+      }
+      if (patch && patch.ndi) {
+        next.ndi = { ...previous.ndi, ...patch.ndi };
       }
       return next;
     });
@@ -495,6 +618,24 @@ export default function App () {
       setLastPush({ ok: false, label: error.message, at: Date.now() });
     }
   }, [selectedTarget, settings, t]);
+
+  const testNotesSend = useCallback(async () => {
+    if (!selectedNotesTarget || !window.api || !window.api.pushText) return;
+    try {
+      const result = await window.api.pushText({
+        settings,
+        target: selectedNotesTarget,
+        text: (config.notes || '').trim() || t('notes.testText')
+      });
+      setLastNotesPush({
+        ok: Boolean(result.ok),
+        label: pushLabel(result, t),
+        at: Date.now()
+      });
+    } catch (error) {
+      setLastNotesPush({ ok: false, label: error.message, at: Date.now() });
+    }
+  }, [selectedNotesTarget, config.notes, settings, t]);
 
   const savePreset = useCallback((name) => {
     const preset = normalizePreset({
@@ -609,7 +750,7 @@ export default function App () {
       <main className="layout">
         <div className="layout__left">
           <TimerDisplay
-            text={outputText}
+            text={rawTimerOutput}
             color={activeColor}
             phase={timer.phase}
             phaseLabel={phaseLabel}
@@ -642,7 +783,19 @@ export default function App () {
                   : t('resolume.enabled')}
               </span>
             </div>
-            <div className="output-box">{outputText}</div>
+            <div className="output-box" style={{ whiteSpace: 'pre-wrap' }}>
+              {effectiveTimerOutput}
+            </div>
+            {config.notesMode === 'separate' && selectedNotesTarget ? (
+              <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+                <span className="muted" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  {t('notes.target')}: {selectedNotesTarget.scope}
+                </span>
+                <div className="output-box" style={{ marginTop: '6px', fontSize: '14px', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto' }}>
+                  {(config.notes || '').trim() || <span className="muted">({t('notes.placeholder')})</span>}
+                </div>
+              </div>
+            ) : null}
           </section>
 
           <PresetManager
@@ -665,6 +818,11 @@ export default function App () {
             onColorChange={updateColor}
             timer={timer}
             onManualApply={applyManualTime}
+            targets={targets}
+            selectedNotesTarget={selectedNotesTarget}
+            onSelectNotesTarget={(id) => updateConfig({ notesTargetId: id || null })}
+            onTestNotes={testNotesSend}
+            lastNotesPush={lastNotesPush}
             t={t}
           />
 
@@ -684,6 +842,8 @@ export default function App () {
               setSelectedTarget(target);
             }}
             onTest={testSend}
+            ndiStatus={ndiStatus}
+            onToggleNdi={handleToggleNdi}
             t={t}
           />
         </div>

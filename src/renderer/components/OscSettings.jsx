@@ -17,6 +17,8 @@ export default function OscSettings ({
   onScan,
   onSelectTarget,
   onTest,
+  ndiStatus,
+  onToggleNdi,
   t
 }) {
   const restOk = health ? health.rest : null;
@@ -36,6 +38,21 @@ export default function OscSettings ({
     onSettingsChange({ timeUpTrigger: { ...timeUpTrigger, ...patch } });
   };
 
+  const ndiConfig = settings.ndi || {
+    enabled: false,
+    name: 'Resolume Arena Timer',
+    fps: 30,
+    transparent: true,
+    includeNotes: true
+  };
+  const updateNdi = (patch) => {
+    const nextNdi = { ...ndiConfig, ...patch };
+    onSettingsChange({ ndi: nextNdi });
+    if (patch.enabled !== undefined && onToggleNdi) {
+      onToggleNdi(patch.enabled, nextNdi);
+    }
+  };
+
   let level = 'checking';
   if (restOk === true && oscOk !== false) level = 'connected';
   else if (restOk === false && oscOk === false) level = 'disconnected';
@@ -43,6 +60,9 @@ export default function OscSettings ({
   else if (restOk === false) level = 'disconnected';
 
   const healthLabel = t(`health.${level === 'checking' ? 'degraded' : level}`);
+
+  const isNdiActive = ndiStatus && ndiStatus.active;
+  const isNdiAvailable = ndiStatus ? ndiStatus.available : true;
 
   return (
     <section className="panel resolume-panel">
@@ -211,6 +231,73 @@ export default function OscSettings ({
                   : t('health.unknown')}
             </strong>
           </div>
+        </div>
+      </div>
+
+      {/* NDI Output Subsection */}
+      <div className="subsection">
+        <div className="panel__header" style={{ marginBottom: '12px' }}>
+          <h3>{t('ndi.title')}</h3>
+          <span className={`health-pill health-pill--${isNdiActive ? 'connected' : isNdiAvailable ? 'checking' : 'disconnected'}`}>
+            <HealthDot level={isNdiActive ? 'connected' : isNdiAvailable ? 'checking' : 'disconnected'} />
+            {isNdiActive ? t('ndi.active') : isNdiAvailable ? t('ndi.inactive') : t('ndi.unavailable')}
+          </span>
+        </div>
+
+        <label className="checkbox-row checkbox-row--strong">
+          <input
+            type="checkbox"
+            checked={Boolean(ndiConfig.enabled)}
+            disabled={!isNdiAvailable}
+            onChange={(event) => updateNdi({ enabled: event.target.checked })}
+          />
+          <span>{t('ndi.enabled')}</span>
+        </label>
+
+        {isNdiActive ? (
+          <p className="muted" style={{ color: 'var(--accent)', fontSize: '12px', margin: '4px 0 10px' }}>
+            {t('ndi.receivers', { count: ndiStatus.connections || 0 })}
+          </p>
+        ) : null}
+
+        <div className="control-grid">
+          <label className="field">
+            <span>{t('ndi.name')}</span>
+            <input
+              type="text"
+              value={ndiConfig.name || 'Resolume Arena Timer'}
+              onChange={(event) => updateNdi({ name: event.target.value })}
+            />
+          </label>
+          <label className="field">
+            <span>{t('ndi.fps')}</span>
+            <select
+              value={ndiConfig.fps || 30}
+              onChange={(event) => updateNdi({ fps: Number(event.target.value) || 30 })}
+            >
+              <option value="30">30 FPS</option>
+              <option value="60">60 FPS</option>
+            </select>
+          </label>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={ndiConfig.transparent !== false}
+              onChange={(event) => updateNdi({ transparent: event.target.checked })}
+            />
+            <span>{t('ndi.transparent')}</span>
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={ndiConfig.includeNotes !== false}
+              onChange={(event) => updateNdi({ includeNotes: event.target.checked })}
+            />
+            <span>{t('ndi.includeNotes')}</span>
+          </label>
         </div>
       </div>
 

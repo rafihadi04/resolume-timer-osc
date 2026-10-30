@@ -408,3 +408,44 @@ In GitHub Actions this comes from the repository variable `QR_STATIC`, which the
 11. For Resolume testing with Arena not running, use a mock HTTP/UDP server.
 12. Do not modify the live composition or save it without explicit user confirmation.
 13. Do not commit unless explicitly requested.
+
+
+---
+
+## 10. Feature Updates (2026-10-30)
+
+### 1. NDI Output
+- Added native NDI streaming support using `@stagetimerio/grandiose` (NewTek/Vizrt NDI 6 SDK bindings).
+- `src/main/ndi-service.js`: Manages NDI video streaming pipeline using an offscreen Chromium BrowserWindow (`webPreferences: { offscreen: true }`) capturing frames in `BGRA` format directly into the NDI sender with zero-copy overhead.
+- Configurable stream name, framerate (30 / 60 FPS), transparent background (alpha channel), and optional notes inclusion.
+- Packaged configuration in `electron-builder.json` unpacks `grandiose.node` and `Processing.NDI.Lib.x64.dll` from asar.
+
+### 2. Website Timer Output with Notes (`/output`)
+- Created `src/main/output.html` served at `http://<lan-ip>:<port>/output` (also aliases `/stage`, `/timer`, `/view`).
+- Displays a clean, full-screen stage timer with oversized numbers, mode and phase pills, speed indicator, progress bar, and formatted speaker/stage notes.
+- Query parameters support:
+  - `?transparent=1` / `?bg=transparent`: Enables transparent background for OBS and Resolume video overlays.
+  - `?notes=hide`: Hides notes section.
+  - `?top=hide` / `?progress=hide`: Customizes layout visibility.
+- Updated `RemoteAccessModal.jsx` with tabs for both **Remote Controller (Phone)** and **Web Timer Output (Stage / OBS)**, including QR code, copy URL, and open browser buttons.
+
+### 3. Notes Output (Two Modes)
+- Added live notes editing to `TimeControls.jsx` and `App.jsx`.
+- **Mode 1 (`\n` on timer)**: Appends notes to the timer string separated by a newline (`\n`), sending both timer and notes to the same Resolume Text Block.
+- **Mode 2 (Separate Text Block)**: Allows selecting a separate Text Block target from the scanned composition specifically for speaker notes, streaming notes independently.
+
+### 4. Synchronize with Remotes (Speed & Notes)
+- Updated `src/main/remote.html` with:
+  - Playback speed controls (`0.5x`, `1.0x`, `1.25x`, `1.5x`, `2.0x`).
+  - Stage notes editor allowing phone operators to update notes sent to the stage and Resolume.
+- Main process `/api/command` updated to handle `setSpeed` and `setNotes`.
+- Renderer state synchronization reflects remote adjustments instantaneously.
+
+### 5. Background Running (Uninterrupted Timer)
+- Added Chromium flags to prevent timer throttling and backgrounding:
+  - `disable-background-timer-throttling`
+  - `disable-renderer-backgrounding`
+  - `disable-backgrounding-occluded-windows`
+- Set `backgroundThrottling: false` in `BrowserWindow` `webPreferences`.
+- Integrated Electron `powerSaveBlocker` to prevent OS sleep/suspension while the timer is running.
+- Upgraded `useTimer.js` with a dual-loop engine: combining `requestAnimationFrame` for smooth foreground rendering with a 50ms interval heartbeat and timestamp delta accumulation (`performance.now()`), guaranteeing continuous and exact timekeeping when the window is minimized.

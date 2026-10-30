@@ -54,6 +54,11 @@ export default function TimeControls ({
   onColorChange,
   timer,
   onManualApply,
+  targets = [],
+  selectedNotesTarget,
+  onSelectNotesTarget,
+  onTestNotes,
+  lastNotesPush,
   t
 }) {
   const [manual, setManual] = useState('');
@@ -83,6 +88,7 @@ export default function TimeControls ({
           : t('timer.start');
 
   const isCountUp = config.mode === 'COUNTUP';
+  const notesMode = config.notesMode || 'append';
 
   return (
     <section className="panel controls-panel">
@@ -204,6 +210,78 @@ export default function TimeControls ({
           </button>
         </div>
         {manualError ? <p className="error-text">{t('timer.invalid')}</p> : null}
+      </div>
+
+      {/* Stage & Speaker Notes Section */}
+      <div className="subsection">
+        <h3>{t('notes.title')}</h3>
+        <label className="field field--wide">
+          <textarea
+            style={{
+              width: '100%',
+              minHeight: '80px',
+              fontFamily: 'inherit',
+              padding: '10px 12px',
+              background: '#0d141c',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              color: 'var(--text)',
+              resize: 'vertical',
+              boxSizing: 'border-box',
+              lineHeight: '1.4'
+            }}
+            placeholder={t('notes.placeholder')}
+            value={config.notes || ''}
+            onChange={(event) => onChange({ notes: event.target.value })}
+          />
+        </label>
+
+        <div className="control-grid" style={{ marginTop: '10px' }}>
+          <label className="field field--wide">
+            <span>{t('notes.mode')}</span>
+            <select
+              value={notesMode}
+              onChange={(event) => onChange({ notesMode: event.target.value })}
+            >
+              <option value="append">{t('notes.modeAppend')}</option>
+              <option value="separate">{t('notes.modeSeparate')}</option>
+            </select>
+          </label>
+        </div>
+
+        {notesMode === 'separate' ? (
+          <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <label className="field field--wide">
+              <span>{t('notes.target')}</span>
+              <select
+                value={selectedNotesTarget ? selectedNotesTarget.id : ''}
+                onChange={(event) => onSelectNotesTarget(event.target.value)}
+              >
+                <option value="">{t('notes.noTarget')}</option>
+                {targets.map((target) => (
+                  <option key={target.id} value={target.id}>
+                    {target.scope} — {target.paramName}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {selectedNotesTarget ? (
+              <div className="inline-field inline-field--between" style={{ marginTop: '4px' }}>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={onTestNotes}
+                >
+                  {t('notes.test')}
+                </button>
+                <span className="muted" style={{ fontSize: '12px' }}>
+                  {lastNotesPush ? lastNotesPush.label : t('resolume.never')}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="subsection">

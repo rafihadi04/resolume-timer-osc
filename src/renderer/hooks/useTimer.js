@@ -9,6 +9,7 @@ export function useTimer (config) {
   const modeRef = useRef(config.mode);
   const durationRef = useRef(Math.max(0, Number(config.durationSeconds) || 0) * 1000);
   const speedRef = useRef(Number(config.speedMultiplier) || 1);
+  const lastTickRef = useRef(performance.now());
 
   useEffect(() => {
     statusRef.current = status;
@@ -29,19 +30,40 @@ export function useTimer (config) {
   useEffect(() => {
     if (status !== 'running') return undefined;
 
-    let frame = null;
-    let last = performance.now();
+    lastTickRef.current = performance.now();
+    let frameId = null;
 
-    const tick = (now) => {
-      const delta = Math.max(0, now - last);
-      last = now;
-      setElapsedMs((previous) => previous + delta * speedRef.current);
-      frame = requestAnimationFrame(tick);
+    const tick = () => {
+      const now = performance.now();
+      const delta = Math.max(0, now - lastTickRef.current);
+      if (delta > 0) {
+        lastTickRef.current = now;
+        setElapsedMs((previous) => previous + delta * speedRef.current);
+      }
     };
 
-    frame = requestAnimationFrame(tick);
+    // Smooth 60fps frame loop when window is foreground / visible
+    const loop = () => {
+      tick();
+      frameId = requestAnimationFrame(loop);
+    };
+    frameId = requestAnimationFrame(loop);
+
+    // Reliable background interval timer (fires even when window is minimized or compositor is paused)
+    const intervalId = setInterval(tick, 50);
+
+    // Instant resync on tab/window visibility restore
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        tick();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     return () => {
-      if (frame !== null) cancelAnimationFrame(frame);
+      if (frameId !== null) cancelAnimationFrame(frameId);
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [status]);
 
