@@ -13,10 +13,16 @@ jobs:
     name: Build Windows Portable (Development)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: windows-latest
+    env:
+      GYP_MSVS_VERSION: '2022'
+      npm_config_msvs_version: '2022'
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -45,6 +51,9 @@ jobs:
     name: Build Multi-Platform Release (Windows & macOS)
     if: github.event_name == 'release'
     runs-on: ${{ matrix.os }}
+    env:
+      GYP_MSVS_VERSION: '2022'
+      npm_config_msvs_version: '2022'
 
     strategy:
       matrix:
@@ -53,6 +62,10 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Setup MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
