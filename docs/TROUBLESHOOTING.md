@@ -133,6 +133,12 @@ If the NDI toggle says "NDI is not available on this system":
 #### Q: Can I run the timer on macOS?
 **A:** Yes, the project supports building on macOS. In Resolume Preferences, the same REST API (port `8080`) and OSC paths apply.
 
+#### Q: What if Resolume's REST API is disabled or blocked on my network?
+**A:** You can use **Manual OSC**. Click the **Manual OSC** button in the Resolume panel, type your target OSC path (e.g. `/composition/layers/1/clips/1/video/source/blocktextgenerator/text`), and click **Apply**. Make sure OSC Input is enabled on port `7000` in Arena Preferences → OSC.
+
+#### Q: Can I run `electron .` or `npm start` directly without Vite running?
+**A:** Yes! The app automatically detects if the Vite dev server is running on `http://localhost:5173`. If Vite is not running, it automatically falls back to the built production files in `dist-renderer/index.html`. Furthermore, if launched from an IDE terminal with `ELECTRON_RUN_AS_NODE=1`, it automatically clears the variable and re-spawns full Electron GUI.
+
 #### Q: How can I donate or support development?
 **A:** Click the **Donate** button in the app header to view the Indonesian **QRIS** donation code. Any Indonesian e-wallet or mobile banking app (GoPay, OVO, DANA, BCA, Mandiri, etc.) can scan it.
 

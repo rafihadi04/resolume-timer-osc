@@ -24,7 +24,8 @@ const DEFAULT_CONFIG = {
   flashHz: 2,
   notes: '',
   notesMode: 'append', // 'append' (\n on timer) or 'separate' (different text block)
-  notesTargetId: null
+  notesTargetId: null,
+  notesFlash: false
 };
 
 const DEFAULT_SETTINGS = {
@@ -57,7 +58,7 @@ const MODE_KEY = {
   COUNTDOWN_THEN_COUNTUP: 'overtime'
 };
 
-function readStorage (key, fallback) {
+function readStorage(key, fallback) {
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) return fallback;
@@ -68,7 +69,7 @@ function readStorage (key, fallback) {
   }
 }
 
-function loadConfig () {
+function loadConfig() {
   const saved = readStorage('rt.config', null);
   if (!saved || typeof saved !== 'object') return { ...DEFAULT_CONFIG };
   const { id: _id, name: _name, ...timing } = saved;
@@ -78,11 +79,12 @@ function loadConfig () {
     notes: saved.notes !== undefined ? saved.notes : DEFAULT_CONFIG.notes,
     notesMode: saved.notesMode || DEFAULT_CONFIG.notesMode,
     notesTargetId: saved.notesTargetId || DEFAULT_CONFIG.notesTargetId,
+    notesFlash: Boolean(saved.notesFlash),
     colorScheme: { ...DEFAULT_CONFIG.colorScheme, ...(saved.colorScheme || {}) }
   };
 }
 
-function loadSettings () {
+function loadSettings() {
   const saved = readStorage('rt.settings', null);
   if (!saved || typeof saved !== 'object') return { ...DEFAULT_SETTINGS };
   return {
@@ -99,17 +101,17 @@ function loadSettings () {
   };
 }
 
-function loadPresets () {
+function loadPresets() {
   const saved = readStorage('rt.presets', []);
   return Array.isArray(saved) ? saved : [];
 }
 
-function loadLanguage () {
+function loadLanguage() {
   const saved = readStorage('rt.language', null);
   return saved === 'id' ? 'id' : 'en';
 }
 
-function normalizePreset (preset) {
+function normalizePreset(preset) {
   if (!preset || typeof preset !== 'object') return null;
   const mode = MODE_KEY[preset.mode] ? preset.mode : 'COUNTDOWN';
   return {
@@ -125,6 +127,7 @@ function normalizePreset (preset) {
     notes: String(preset.notes || ''),
     notesMode: preset.notesMode === 'separate' ? 'separate' : 'append',
     notesTargetId: preset.notesTargetId || null,
+    notesFlash: Boolean(preset.notesFlash),
     colorScheme: {
       ...DEFAULT_CONFIG.colorScheme,
       ...(preset.colorScheme || {})
@@ -132,7 +135,7 @@ function normalizePreset (preset) {
   };
 }
 
-function healthLevelFor (health) {
+function healthLevelFor(health) {
   if (!health) return 'checking';
   const rest = health.rest;
   const osc = health.osc ? health.osc.ok : null;
@@ -144,14 +147,14 @@ function healthLevelFor (health) {
   return 'checking';
 }
 
-function pushLabel (result, t) {
+function pushLabel(result, t) {
   if (result && result.ok) {
     return `${String(result.transport || 'sent').toUpperCase()} · ${new Date().toLocaleTimeString()}`;
   }
   return `${t('resolume.error')} · ${(result && result.error) || 'unknown'}`;
 }
 
-export default function App () {
+export default function App() {
   const [config, setConfig] = useState(loadConfig);
   const [settings, setSettings] = useState(loadSettings);
   const [targets, setTargets] = useState([]);
@@ -170,18 +173,59 @@ export default function App () {
   const [remoteInfo, setRemoteInfo] = useState(null);
   const [ndiStatus, setNdiStatus] = useState(null);
   const [version, setVersion] = useState('');
+  const [screenFlashUntil, setScreenFlashUntil] = useState(0);
+  const [screenFlashRemaining, setScreenFlashRemaining] = useState(0);
+  const [updateInfo, setUpdateInfo] = useState(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateStatusMessage, setUpdateStatusMessage] = useState('');
 
   const didAutoScan = useRef(false);
   const timeUpTriggeredRef = useRef(false);
   const remoteStateRef = useRef(null);
 
-  const timer = useTimer(config);
+  const triggerScreenFlash = useCallback((durationSeconds = 5) => {
+    const sec = Math.max(1, Math.min(60, Number(durationSeconds) || 5));
+    const until = Date.now() + sec * 1000;
+    setScreenFlashUntil(until);
+    setScreenFlashRemaining(sec);
+  }, []);
 
-  const t = useCallback((key, options) => i18n.t(key, options), [language]);
+  const stopScreenFlash = useCallback(() => {
+    setScreenFlashUntil(0);
+    setScreenFlashRemaining(0);
+  }, []);
+
+  useEffect(() => {
+    if (!screenFlashUntil || Date.now() >= screenFlashUntil) {
+      if (screenFlashRemaining !== 0) setScreenFlashRemaining(0);
+      return undefined;
+    }
+
+    const interval = setInterval(() => {
+      const remainingMs = screenFlashUntil - Date.now();
+      if (remainingMs <= 0) {
+        setScreenFlashUntil(0);
+        setScreenFlashRemaining(0);
+      } else {
+        setScreenFlashRemaining(Math.ceil(remainingMs / 1000));
+      }
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, [screenFlashUntil, screenFlashRemaining]);
 
   const updateConfig = useCallback((patch) => {
     setConfig((previous) => ({ ...previous, ...patch }));
   }, []);
+
+  const handleDurationChange = useCallback((newDurationSeconds) => {
+    updateConfig({ durationSeconds: newDurationSeconds });
+  }, [updateConfig]);
+
+  const timer = useTimer(config, handleDurationChange);
+
+  const t = useCallback((key, options) => i18n.t(key, options), [language]);
 
   useEffect(() => {
     window.localStorage.setItem('rt.config', JSON.stringify(config));
@@ -214,9 +258,41 @@ export default function App () {
 
   useEffect(() => {
     if (window.api && window.api.version) {
-      window.api.version().then(setVersion).catch(() => {});
+      window.api.version().then(setVersion).catch(() => { });
     }
   }, []);
+
+  const checkForUpdates = useCallback(async (manual = false) => {
+    if (!window.api || !window.api.checkUpdate) return;
+    setUpdateChecking(true);
+    setUpdateStatusMessage('');
+    try {
+      const res = await window.api.checkUpdate();
+      if (res && res.ok) {
+        setUpdateInfo(res);
+        if (res.hasUpdate) {
+          setUpdateDismissed(false);
+        } else if (manual) {
+          setUpdateStatusMessage(t('update.upToDate'));
+          setTimeout(() => setUpdateStatusMessage(''), 4000);
+        }
+      } else if (manual && res && res.error) {
+        setUpdateStatusMessage(t('update.error'));
+        setTimeout(() => setUpdateStatusMessage(''), 4000);
+      }
+    } catch (_err) {
+      if (manual) {
+        setUpdateStatusMessage(t('update.error'));
+        setTimeout(() => setUpdateStatusMessage(''), 4000);
+      }
+    } finally {
+      setUpdateChecking(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    checkForUpdates(false);
+  }, [checkForUpdates]);
 
   // Background running power save sync (prevents OS sleep while running)
   useEffect(() => {
@@ -228,7 +304,7 @@ export default function App () {
   // NDI status check
   useEffect(() => {
     if (window.api && window.api.ndiStatus) {
-      window.api.ndiStatus().then(setNdiStatus).catch(() => {});
+      window.api.ndiStatus().then(setNdiStatus).catch(() => { });
     }
   }, []);
 
@@ -245,7 +321,7 @@ export default function App () {
       }
     } catch (_err) {
       if (window.api.ndiStatus) {
-        window.api.ndiStatus().then(setNdiStatus).catch(() => {});
+        window.api.ndiStatus().then(setNdiStatus).catch(() => { });
       }
     }
   }, [settings.ndi]);
@@ -280,587 +356,661 @@ export default function App () {
       else if (command.action === 'adjust') timer.adjust(Number(command.seconds) || 0);
       else if (command.action === 'setSpeed') updateConfig({ speedMultiplier: Number(command.speed) || 1 });
       else if (command.action === 'setNotes') updateConfig({ notes: String(command.notes || '') });
+      else if (command.action === 'flashScreen') triggerScreenFlash(Number(command.duration) || 5);
+      else if (command.action === 'stopScreenFlash') stopScreenFlash();
     });
-  }, [timer.toggle, timer.start, timer.pause, timer.reset, timer.adjust, updateConfig]);
+}, [timer.toggle, timer.start, timer.pause, timer.reset, timer.adjust, updateConfig, triggerScreenFlash, stopScreenFlash]);
 
-  const scanComposition = useCallback(async (options = {}) => {
-    if (!window.api || !window.api.discover) return;
-    const silent = Boolean(options && options.silent);
-    setScanning(true);
-    if (!silent) setScanError('');
+const scanComposition = useCallback(async (options = {}) => {
+  if (!window.api || !window.api.discover) return;
+  const silent = Boolean(options && options.silent);
+  setScanning(true);
+  if (!silent) setScanError('');
 
-    try {
-      const result = await window.api.discover(settings);
-      if (result.ok) {
-        setTargets(result.targets);
-        setSelectedTarget((previous) => {
-          if (previous) {
-            const existing = result.targets.find((target) => target.id === previous.id);
-            if (existing) return existing;
-          }
-          return result.targets[0] || null;
-        });
-      } else {
-        setTargets([]);
-        if (!silent) setScanError(result.error || 'Unable to reach Resolume');
-      }
-    } catch (error) {
-      if (!silent) setScanError(error.message);
-    } finally {
-      setScanning(false);
+  try {
+    const result = await window.api.discover(settings);
+    if (result.ok) {
+      setTargets(result.targets);
+      setSelectedTarget((previous) => {
+        if (previous) {
+          const existing = result.targets.find((target) => target.id === previous.id);
+          if (existing) return existing;
+        }
+        return result.targets[0] || null;
+      });
+    } else {
+      setTargets([]);
+      if (!silent) setScanError(result.error || 'Unable to reach Resolume');
     }
-  }, [settings]);
+  } catch (error) {
+    if (!silent) setScanError(error.message);
+  } finally {
+    setScanning(false);
+  }
+}, [settings]);
 
-  useEffect(() => {
-    if (didAutoScan.current) return;
-    didAutoScan.current = true;
-    scanComposition({ silent: true });
-  }, [scanComposition]);
+useEffect(() => {
+  if (didAutoScan.current) return;
+  didAutoScan.current = true;
+  scanComposition({ silent: true });
+}, [scanComposition]);
 
-  useEffect(() => {
-    let cancelled = false;
+useEffect(() => {
+  let cancelled = false;
 
-    const check = async () => {
-      if (!window.api || !window.api.health) return;
-      try {
-        const result = await window.api.health(settings);
-        if (!cancelled) setHealth(result);
-      } catch (_error) {
-        if (!cancelled) setHealth({ rest: false, osc: null, error: 'health check failed' });
-      }
-    };
-
-    check();
-    const interval = setInterval(check, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [settings.host, settings.restPort, settings.oscHost, settings.oscPort]);
-
-  const flashPeriod = 1000 / Math.max(0.5, Number(config.flashHz) * 2);
-  const shouldFlash =
-    timer.isTimeOut &&
-    config.flashEnabled &&
-    (config.mode === 'COUNTDOWN' || config.mode === 'COUNTDOWN_THEN_COUNTUP');
-  const flashOn = !shouldFlash || Math.floor(timer.elapsedMs / flashPeriod) % 2 === 0;
-
-  const timerText = msToDisplay(timer.displayMs, {
-    ceil: config.mode !== 'COUNTUP' && !timer.isOvertime,
-    plus: timer.isOvertime
-  });
-  const timesUpText = config.timesUpMessage || "TIME'S UP";
-  const rawTimerOutput = flashOn ? timerText : timesUpText;
-
-  // Mode 1: \n on timer Text Block
-  const effectiveTimerOutput =
-    config.notesMode === 'append' && (config.notes || '').trim()
-      ? `${rawTimerOutput}\n${(config.notes || '').trim()}`
-      : rawTimerOutput;
-
-  const selectedNotesTarget = targets.find((t) => t.id === config.notesTargetId) || null;
-
-  const activeColor = timer.isTimeOut
-    ? config.colorScheme.timeout
-    : timer.isWarning
-      ? config.colorScheme.warning
-      : config.colorScheme.running;
-
-  const phaseLabel = t(`status.${timer.phase === 'ready' ? 'ready' : timer.phase}`);
-  const modeLabel = t(`mode.${MODE_KEY[config.mode] || 'countdown'}`);
-  const healthLevel = healthLevelFor(health);
-
-  // Sync state to phone remote and web output
-  remoteStateRef.current = {
-    text: rawTimerOutput,
-    notes: config.notes || '',
-    speed: config.speedMultiplier || 1,
-    phase: timer.phase,
-    phaseLabel,
-    modeLabel,
-    color: activeColor,
-    progress: timer.progress,
-    isOvertime: timer.isOvertime,
-    status: timer.status
+  const check = async () => {
+    if (!window.api || !window.api.health) return;
+    try {
+      const result = await window.api.health(settings);
+      if (!cancelled) setHealth(result);
+    } catch (_error) {
+      if (!cancelled) setHealth({ rest: false, osc: null, error: 'health check failed' });
+    }
   };
 
-  useEffect(() => {
-    if (!window.api || !window.api.remoteUpdateState) return undefined;
-    const sendState = () => window.api.remoteUpdateState(remoteStateRef.current);
-    sendState();
-    const interval = setInterval(sendState, 300);
-    return () => clearInterval(interval);
-  }, []);
+  check();
+  const interval = setInterval(check, 5000);
+  return () => {
+    cancelled = true;
+    clearInterval(interval);
+  };
+}, [settings.host, settings.restPort, settings.oscHost, settings.oscPort]);
 
-  // Push timer text to Resolume (effectiveTimerOutput includes \n notes in Mode 1)
-  useEffect(() => {
-    if (!settings.enabled || !selectedTarget) return undefined;
-    if (!window.api || !window.api.pushText) return undefined;
+const flashPeriod = 1000 / Math.max(0.5, Number(config.flashHz) * 2);
+const shouldFlash =
+  timer.isTimeOut &&
+  config.flashEnabled &&
+  (config.mode === 'COUNTDOWN' || config.mode === 'COUNTDOWN_THEN_COUNTUP');
+const flashOn = !shouldFlash || Math.floor(timer.elapsedMs / flashPeriod) % 2 === 0;
 
-    let cancelled = false;
+const timerText = msToDisplay(timer.displayMs, {
+  ceil: config.mode !== 'COUNTUP' && !timer.isOvertime,
+  plus: timer.isOvertime
+});
+const timesUpText = config.timesUpMessage || "TIME'S UP";
+const rawTimerOutput = flashOn ? timerText : timesUpText;
 
-    const send = async () => {
-      try {
-        const result = await window.api.pushText({
-          settings,
-          target: selectedTarget,
-          text: effectiveTimerOutput
-        });
-        if (!cancelled) {
-          setLastPush({
-            ok: Boolean(result.ok),
-            transport: result.transport,
-            label: pushLabel(result, t),
-            at: Date.now()
-          });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setLastPush({
-            ok: false,
-            label: `${t('resolume.error')} · ${error.message}`,
-            at: Date.now()
-          });
-        }
-      }
-    };
+// Mode 1: \n on timer Text Block
+const effectiveTimerOutput =
+  config.notesMode === 'append' && (config.notes || '').trim()
+    ? `${rawTimerOutput}\n${(config.notes || '').trim()}`
+    : rawTimerOutput;
 
-    send();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    effectiveTimerOutput,
-    settings.enabled,
-    settings.sendMode,
-    settings.host,
-    settings.restPort,
-    settings.oscHost,
-    settings.oscPort,
-    selectedTarget,
-    t
-  ]);
+const selectedNotesTarget = targets.find((t) => t.id === config.notesTargetId) || null;
 
-  // Mode 2: Push notes to separate Text Block target
-  useEffect(() => {
-    if (!settings.enabled || config.notesMode !== 'separate' || !selectedNotesTarget) return undefined;
-    if (!window.api || !window.api.pushText) return undefined;
+const activeColor = timer.isTimeOut
+  ? config.colorScheme.timeout
+  : timer.isWarning
+    ? config.colorScheme.warning
+    : config.colorScheme.running;
 
-    let cancelled = false;
+const phaseLabel = t(`status.${timer.phase === 'ready' ? 'ready' : timer.phase}`);
+const modeLabel = t(`mode.${MODE_KEY[config.mode] || 'countdown'}`);
+const healthLevel = healthLevelFor(health);
 
-    const sendNotes = async () => {
-      try {
-        const result = await window.api.pushText({
-          settings,
-          target: selectedNotesTarget,
-          text: (config.notes || '').trim()
-        });
-        if (!cancelled) {
-          setLastNotesPush({
-            ok: Boolean(result.ok),
-            label: pushLabel(result, t),
-            at: Date.now()
-          });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setLastNotesPush({
-            ok: false,
-            label: `${t('resolume.error')} · ${error.message}`,
-            at: Date.now()
-          });
-        }
-      }
-    };
+// Sync state to phone remote and web output
+remoteStateRef.current = {
+  text: rawTimerOutput,
+  notes: config.notes || '',
+  notesFlash: Boolean(config.notesFlash),
+  screenFlashUntil,
+  speed: config.speedMultiplier || 1,
+  phase: timer.phase,
+  phaseLabel,
+  modeLabel,
+  color: activeColor,
+  progress: timer.progress,
+  isOvertime: timer.isOvertime,
+  status: timer.status,
+  elapsedText: formatDuration(timer.realElapsedMs / 1000),
+  remainingText: formatDuration(timer.realRemainingMs / 1000)
+};
 
-    sendNotes();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    config.notes,
-    config.notesMode,
-    selectedNotesTarget,
-    settings.enabled,
-    settings.sendMode,
-    settings.host,
-    settings.restPort,
-    settings.oscHost,
-    settings.oscPort,
-    t
-  ]);
+useEffect(() => {
+  if (!window.api || !window.api.remoteUpdateState) return undefined;
+  const sendState = () => window.api.remoteUpdateState(remoteStateRef.current);
+  sendState();
+  const interval = setInterval(sendState, 300);
+  return () => clearInterval(interval);
+}, []);
 
-  // Color sync to Resolume
-  useEffect(() => {
-    if (!settings.enabled || settings.syncColor === false) return undefined;
-    if (!selectedTarget || !selectedTarget.colorParamId) return undefined;
-    if (!window.api || !window.api.pushColor) return undefined;
+// Push timer text to Resolume (effectiveTimerOutput includes \n notes in Mode 1)
+useEffect(() => {
+  if (!settings.enabled || !selectedTarget) return undefined;
+  if (!window.api || !window.api.pushText) return undefined;
 
-    let cancelled = false;
+  let cancelled = false;
 
-    const sendColor = async () => {
-      try {
-        const result = await window.api.pushColor({
-          settings,
-          target: selectedTarget,
-          color: activeColor
-        });
-        if (!cancelled) {
-          setLastPush({
-            ok: Boolean(result.ok),
-            transport: 'color',
-            label: result.ok
-              ? `COLOR · ${new Date().toLocaleTimeString()}`
-              : `${t('resolume.error')} · ${result.error}`,
-            at: Date.now()
-          });
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setLastPush({ ok: false, label: error.message, at: Date.now() });
-        }
-      }
-    };
-
-    sendColor();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeColor,
-    settings.enabled,
-    settings.syncColor,
-    settings.host,
-    settings.restPort,
-    settings.oscHost,
-    settings.oscPort,
-    settings.sendMode,
-    selectedTarget,
-    t
-  ]);
-
-  // Time's up trigger
-  useEffect(() => {
-    if (!timer.isTimeOut) {
-      timeUpTriggeredRef.current = false;
-      return;
-    }
-
-    if (timer.status !== 'running' && timer.status !== 'finished') return;
-
-    const trigger = settings.timeUpTrigger;
-    if (!trigger || !trigger.enabled) return;
-    if (timeUpTriggeredRef.current) return;
-    if (!window.api || !window.api.triggerResolume) return;
-
-    timeUpTriggeredRef.current = true;
-    const startedAt = new Date().toLocaleTimeString();
-
-    window.api.triggerResolume({ settings, trigger }).then((result) => {
-      setLastTrigger({
-        ok: Boolean(result.ok),
-        label: result.ok
-          ? `${String(trigger.type || '').toUpperCase()} · ${startedAt}`
-          : `${t('resolume.error')} · ${result.error}`
-      });
-    }).catch((error) => {
-      setLastTrigger({ ok: false, label: error.message });
-    });
-  }, [timer.isTimeOut, timer.status, settings.timeUpTrigger, settings.host, settings.restPort, t]);
-
-  const updateColor = useCallback((key, value) => {
-    setConfig((previous) => ({
-      ...previous,
-      colorScheme: { ...previous.colorScheme, [key]: value }
-    }));
-  }, []);
-
-  const updateSettings = useCallback((patch) => {
-    setSettings((previous) => {
-      const next = { ...previous, ...patch };
-      if (patch && patch.timeUpTrigger) {
-        next.timeUpTrigger = { ...previous.timeUpTrigger, ...patch.timeUpTrigger };
-      }
-      if (patch && patch.ndi) {
-        next.ndi = { ...previous.ndi, ...patch.ndi };
-      }
-      return next;
-    });
-  }, []);
-
-  const applyManualTime = useCallback(
-    (seconds) => {
-      if (config.mode !== 'COUNTUP' && config.durationSeconds <= 0) {
-        setConfig((previous) => ({ ...previous, durationSeconds: seconds }));
-        timer.reset();
-        return;
-      }
-      timer.setCurrentSeconds(seconds);
-    },
-    [config.mode, config.durationSeconds, timer]
-  );
-
-  const testSend = useCallback(async () => {
-    if (!selectedTarget || !window.api || !window.api.pushText) return;
+  const send = async () => {
     try {
       const result = await window.api.pushText({
         settings,
         target: selectedTarget,
-        text: t('resolume.testText')
+        text: effectiveTimerOutput
       });
-      setLastPush({
-        ok: Boolean(result.ok),
-        transport: result.transport,
-        label: pushLabel(result, t),
-        at: Date.now()
-      });
+      if (!cancelled) {
+        setLastPush({
+          ok: Boolean(result.ok),
+          transport: result.transport,
+          label: pushLabel(result, t),
+          at: Date.now()
+        });
+      }
     } catch (error) {
-      setLastPush({ ok: false, label: error.message, at: Date.now() });
+      if (!cancelled) {
+        setLastPush({
+          ok: false,
+          label: `${t('resolume.error')} · ${error.message}`,
+          at: Date.now()
+        });
+      }
     }
-  }, [selectedTarget, settings, t]);
+  };
 
-  const testNotesSend = useCallback(async () => {
-    if (!selectedNotesTarget || !window.api || !window.api.pushText) return;
+  send();
+  return () => {
+    cancelled = true;
+  };
+}, [
+  effectiveTimerOutput,
+  settings.enabled,
+  settings.sendMode,
+  settings.host,
+  settings.restPort,
+  settings.oscHost,
+  settings.oscPort,
+  selectedTarget,
+  t
+]);
+
+// Mode 2: Push notes to separate Text Block target
+useEffect(() => {
+  if (!settings.enabled || config.notesMode !== 'separate' || !selectedNotesTarget) return undefined;
+  if (!window.api || !window.api.pushText) return undefined;
+
+  let cancelled = false;
+
+  const sendNotes = async () => {
     try {
       const result = await window.api.pushText({
         settings,
         target: selectedNotesTarget,
-        text: (config.notes || '').trim() || t('notes.testText')
+        text: (config.notes || '').trim()
       });
-      setLastNotesPush({
-        ok: Boolean(result.ok),
-        label: pushLabel(result, t),
-        at: Date.now()
-      });
+      if (!cancelled) {
+        setLastNotesPush({
+          ok: Boolean(result.ok),
+          label: pushLabel(result, t),
+          at: Date.now()
+        });
+      }
     } catch (error) {
-      setLastNotesPush({ ok: false, label: error.message, at: Date.now() });
+      if (!cancelled) {
+        setLastNotesPush({
+          ok: false,
+          label: `${t('resolume.error')} · ${error.message}`,
+          at: Date.now()
+        });
+      }
     }
-  }, [selectedNotesTarget, config.notes, settings, t]);
+  };
 
-  const savePreset = useCallback((name) => {
-    const preset = normalizePreset({
-      ...config,
-      id: `preset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      name
-    });
-    setPresets((previous) => [preset, ...previous]);
-  }, [config]);
+  sendNotes();
+  return () => {
+    cancelled = true;
+  };
+}, [
+  config.notes,
+  config.notesMode,
+  selectedNotesTarget,
+  settings.enabled,
+  settings.sendMode,
+  settings.host,
+  settings.restPort,
+  settings.oscHost,
+  settings.oscPort,
+  t
+]);
 
-  const loadPreset = useCallback((preset) => {
-    const normalized = normalizePreset(preset);
-    if (!normalized) return;
-    const { id, name, ...presetConfig } = normalized;
-    setConfig((previous) => ({ ...previous, ...presetConfig }));
-    timer.reset();
-  }, [timer]);
+// Color sync to Resolume
+useEffect(() => {
+  if (!settings.enabled || settings.syncColor === false) return undefined;
+  if (!selectedTarget || !selectedTarget.colorParamId) return undefined;
+  if (!window.api || !window.api.pushColor) return undefined;
 
-  const updatePreset = useCallback((preset) => {
-    const normalized = normalizePreset({ ...config, id: preset.id, name: preset.name });
-    setPresets((previous) =>
-      previous.map((item) => (item.id === preset.id ? normalized : item))
-    );
-  }, [config]);
+  let cancelled = false;
 
-  const deletePreset = useCallback((id) => {
-    setPresets((previous) => previous.filter((preset) => preset.id !== id));
-  }, []);
-
-  const exportPresets = useCallback(() => {
-    const blob = new Blob([JSON.stringify(presets, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'resolume-timer-presets.json';
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  }, [presets]);
-
-  const importPresets = useCallback(async (file) => {
+  const sendColor = async () => {
     try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      const incoming = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray(parsed.presets)
-          ? parsed.presets
-          : [parsed];
-
-      const normalized = incoming.map(normalizePreset).filter(Boolean);
-      if (normalized.length === 0) throw new Error('empty preset file');
-
-      setPresets((previous) => {
-        const existing = new Set(previous.map((preset) => preset.id));
-        const fresh = normalized.map((preset) =>
-          existing.has(preset.id)
-            ? { ...preset, id: `${preset.id}_${Math.random().toString(36).slice(2, 6)}` }
-            : preset
-        );
-        return [...fresh, ...previous];
+      const result = await window.api.pushColor({
+        settings,
+        target: selectedTarget,
+        color: activeColor
       });
-      setPresetImportError(false);
-    } catch (_error) {
-      setPresetImportError(true);
+      if (!cancelled) {
+        setLastPush({
+          ok: Boolean(result.ok),
+          transport: 'color',
+          label: result.ok
+            ? `COLOR · ${new Date().toLocaleTimeString()}`
+            : `${t('resolume.error')} · ${result.error}`,
+          at: Date.now()
+        });
+      }
+    } catch (error) {
+      if (!cancelled) {
+        setLastPush({ ok: false, label: error.message, at: Date.now() });
+      }
     }
-  }, []);
+  };
 
-  const stats = [
-    { label: t('timer.elapsed'), value: formatDuration(timer.elapsedMs / 1000) },
-    { label: t('timer.remaining'), value: formatDuration(timer.remainingMs / 1000) }
-  ];
-  if (timer.isOvertime) {
-    stats.push({ label: t('timer.overtime'), value: formatDuration(timer.overtimeMs / 1000), overtime: true });
+  sendColor();
+  return () => {
+    cancelled = true;
+  };
+}, [
+  activeColor,
+  settings.enabled,
+  settings.syncColor,
+  settings.host,
+  settings.restPort,
+  settings.oscHost,
+  settings.oscPort,
+  settings.sendMode,
+  selectedTarget,
+  t
+]);
+
+// Time's up trigger
+useEffect(() => {
+  if (!timer.isTimeOut) {
+    timeUpTriggeredRef.current = false;
+    return;
   }
 
-  return (
-    <div className="app">
-      <header className="app-header">
-        <div className="brand">
-          <div className="brand__mark">RT</div>
+  if (timer.status !== 'running' && timer.status !== 'finished') return;
+
+  const trigger = settings.timeUpTrigger;
+  if (!trigger || !trigger.enabled) return;
+  if (timeUpTriggeredRef.current) return;
+  if (!window.api || !window.api.triggerResolume) return;
+
+  timeUpTriggeredRef.current = true;
+  const startedAt = new Date().toLocaleTimeString();
+
+  window.api.triggerResolume({ settings, trigger }).then((result) => {
+    setLastTrigger({
+      ok: Boolean(result.ok),
+      label: result.ok
+        ? `${String(trigger.type || '').toUpperCase()} · ${startedAt}`
+        : `${t('resolume.error')} · ${result.error}`
+    });
+  }).catch((error) => {
+    setLastTrigger({ ok: false, label: error.message });
+  });
+}, [timer.isTimeOut, timer.status, settings.timeUpTrigger, settings.host, settings.restPort, t]);
+
+const updateColor = useCallback((key, value) => {
+  setConfig((previous) => ({
+    ...previous,
+    colorScheme: { ...previous.colorScheme, [key]: value }
+  }));
+}, []);
+
+const updateSettings = useCallback((patch) => {
+  setSettings((previous) => {
+    const next = { ...previous, ...patch };
+    if (patch && patch.timeUpTrigger) {
+      next.timeUpTrigger = { ...previous.timeUpTrigger, ...patch.timeUpTrigger };
+    }
+    if (patch && patch.ndi) {
+      next.ndi = { ...previous.ndi, ...patch.ndi };
+    }
+    return next;
+  });
+}, []);
+
+const applyManualTime = useCallback(
+  (seconds) => {
+    if (config.mode !== 'COUNTUP' && config.durationSeconds <= 0) {
+      setConfig((previous) => ({ ...previous, durationSeconds: seconds }));
+      timer.reset();
+      return;
+    }
+    timer.setCurrentSeconds(seconds);
+  },
+  [config.mode, config.durationSeconds, timer]
+);
+
+const testSend = useCallback(async () => {
+  if (!selectedTarget || !window.api || !window.api.pushText) return;
+  try {
+    const result = await window.api.pushText({
+      settings,
+      target: selectedTarget,
+      text: t('resolume.testText')
+    });
+    setLastPush({
+      ok: Boolean(result.ok),
+      transport: result.transport,
+      label: pushLabel(result, t),
+      at: Date.now()
+    });
+  } catch (error) {
+    setLastPush({ ok: false, label: error.message, at: Date.now() });
+  }
+}, [selectedTarget, settings, t]);
+
+const testNotesSend = useCallback(async () => {
+  if (!selectedNotesTarget || !window.api || !window.api.pushText) return;
+  try {
+    const result = await window.api.pushText({
+      settings,
+      target: selectedNotesTarget,
+      text: (config.notes || '').trim() || t('notes.testText')
+    });
+    setLastNotesPush({
+      ok: Boolean(result.ok),
+      label: pushLabel(result, t),
+      at: Date.now()
+    });
+  } catch (error) {
+    setLastNotesPush({ ok: false, label: error.message, at: Date.now() });
+  }
+}, [selectedNotesTarget, config.notes, settings, t]);
+
+const savePreset = useCallback((name) => {
+  const preset = normalizePreset({
+    ...config,
+    id: `preset_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name
+  });
+  setPresets((previous) => [preset, ...previous]);
+}, [config]);
+
+const loadPreset = useCallback((preset) => {
+  const normalized = normalizePreset(preset);
+  if (!normalized) return;
+  const { id, name, ...presetConfig } = normalized;
+  setConfig((previous) => ({ ...previous, ...presetConfig }));
+  timer.reset();
+}, [timer]);
+
+const updatePreset = useCallback((preset) => {
+  const normalized = normalizePreset({ ...config, id: preset.id, name: preset.name });
+  setPresets((previous) =>
+    previous.map((item) => (item.id === preset.id ? normalized : item))
+  );
+}, [config]);
+
+const deletePreset = useCallback((id) => {
+  setPresets((previous) => previous.filter((preset) => preset.id !== id));
+}, []);
+
+const exportPresets = useCallback(() => {
+  const blob = new Blob([JSON.stringify(presets, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = 'resolume-timer-presets.json';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}, [presets]);
+
+const importPresets = useCallback(async (file) => {
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const incoming = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.presets)
+        ? parsed.presets
+        : [parsed];
+
+    const normalized = incoming.map(normalizePreset).filter(Boolean);
+    if (normalized.length === 0) throw new Error('empty preset file');
+
+    setPresets((previous) => {
+      const existing = new Set(previous.map((preset) => preset.id));
+      const fresh = normalized.map((preset) =>
+        existing.has(preset.id)
+          ? { ...preset, id: `${preset.id}_${Math.random().toString(36).slice(2, 6)}` }
+          : preset
+      );
+      return [...fresh, ...previous];
+    });
+    setPresetImportError(false);
+  } catch (_error) {
+    setPresetImportError(true);
+  }
+}, []);
+
+const stats = [
+  { label: t('timer.elapsed'), value: formatDuration(timer.realElapsedMs / 1000) },
+  { label: t('timer.remaining'), value: formatDuration(timer.realRemainingMs / 1000) }
+];
+if (timer.isOvertime) {
+  stats.push({ label: t('timer.overtime'), value: formatDuration(timer.overtimeMs / 1000), overtime: true });
+}
+
+return (
+  <div className="app">
+    <header className="app-header">
+      <div className="brand">
+        <div className="brand__mark">RT</div>
+        <div>
+          <h1>{t('app.title')}</h1>
+          <p>{t('app.subtitle')}</p>
+        </div>
+      </div>
+
+      <div className="header-actions">
+        <span className={`health-pill health-pill--${healthLevel}`}>
+          <span className={`status-dot status-dot--${healthLevel}`} />
+          {healthLevel === 'checking' ? t('status.checking') : t(`health.${healthLevel}`)}
+        </span>
+
+        <label className="language-select">
+          <span className="sr-only">{t('lang.label')}</span>
+          <select value={language} onChange={(event) => changeLanguage(event.target.value)}>
+            <option value="en">{t('lang.en')}</option>
+            <option value="id">{t('lang.id')}</option>
+          </select>
+        </label>
+
+        <button type="button" className="button" onClick={() => setRemoteOpen(true)}>
+          {t('remote.button')}
+        </button>
+        <button type="button" className="button button--accent" onClick={() => setDonateOpen(true)}>
+          {t('donate.button')}
+        </button>
+      </div>
+    </header>
+
+    {updateInfo && updateInfo.hasUpdate && !updateDismissed ? (
+      <div className="update-banner">
+        <div className="update-banner__content">
+          <span className="update-banner__icon">🚀</span>
           <div>
-            <h1>{t('app.title')}</h1>
-            <p>{t('app.subtitle')}</p>
+            <strong>{t('update.availableTitle', { version: updateInfo.latestVersion })}</strong>
+            <span className="update-banner__desc">
+              {' — '}
+              {t('update.availableDesc', {
+                current: version || updateInfo.currentVersion,
+                latest: updateInfo.latestVersion
+              })}
+            </span>
           </div>
         </div>
-
-        <div className="header-actions">
-          <span className={`health-pill health-pill--${healthLevel}`}>
-            <span className={`status-dot status-dot--${healthLevel}`} />
-            {healthLevel === 'checking' ? t('status.checking') : t(`health.${healthLevel}`)}
-          </span>
-
-          <label className="language-select">
-            <span className="sr-only">{t('lang.label')}</span>
-            <select value={language} onChange={(event) => changeLanguage(event.target.value)}>
-              <option value="en">{t('lang.en')}</option>
-              <option value="id">{t('lang.id')}</option>
-            </select>
-          </label>
-
-          <button type="button" className="button" onClick={() => setRemoteOpen(true)}>
-            {t('remote.button')}
-          </button>
-          <button type="button" className="button button--accent" onClick={() => setDonateOpen(true)}>
-            {t('donate.button')}
-          </button>
-        </div>
-      </header>
-
-      <main className="layout">
-        <div className="layout__left">
-          <TimerDisplay
-            text={rawTimerOutput}
-            color={activeColor}
-            phase={timer.phase}
-            phaseLabel={phaseLabel}
-            modeLabel={modeLabel}
-            progress={timer.progress}
-            isOvertime={timer.isOvertime || (!flashOn && shouldFlash)}
-          />
-
-          <section className="stat-strip">
-            {stats.map((stat) => (
-              <div key={stat.label} className={`stat ${stat.overtime ? 'stat--overtime' : ''}`}>
-                <span>{stat.label}</span>
-                <strong>{stat.value}</strong>
-              </div>
-            ))}
-            <div className="stat stat--speed">
-              <span>{t('timer.speed')}</span>
-              <strong>{config.speedMultiplier}x</strong>
-            </div>
-          </section>
-
-          <section className="panel output-panel">
-            <div className="panel__header">
-              <h2>{t('app.outputPreview')}</h2>
-              <span className="muted">
-                {settings.enabled
-                  ? selectedTarget
-                    ? selectedTarget.scope
-                    : t('resolume.selectTarget')
-                  : t('resolume.enabled')}
-              </span>
-            </div>
-            <div className="output-box" style={{ whiteSpace: 'pre-wrap' }}>
-              {effectiveTimerOutput}
-            </div>
-            {config.notesMode === 'separate' && selectedNotesTarget ? (
-              <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
-                <span className="muted" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                  {t('notes.target')}: {selectedNotesTarget.scope}
-                </span>
-                <div className="output-box" style={{ marginTop: '6px', fontSize: '14px', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto' }}>
-                  {(config.notes || '').trim() || <span className="muted">({t('notes.placeholder')})</span>}
-                </div>
-              </div>
-            ) : null}
-          </section>
-
-          <PresetManager
-            presets={presets}
-            onSave={savePreset}
-            onLoad={loadPreset}
-            onUpdate={updatePreset}
-            onDelete={deletePreset}
-            onExport={exportPresets}
-            onImport={importPresets}
-            importError={presetImportError}
-            t={t}
-          />
-        </div>
-
-        <div className="layout__right">
-          <TimeControls
-            config={config}
-            onChange={updateConfig}
-            onColorChange={updateColor}
-            timer={timer}
-            onManualApply={applyManualTime}
-            targets={targets}
-            selectedNotesTarget={selectedNotesTarget}
-            onSelectNotesTarget={(id) => updateConfig({ notesTargetId: id || null })}
-            onTestNotes={testNotesSend}
-            lastNotesPush={lastNotesPush}
-            t={t}
-          />
-
-          <OscSettings
-            settings={settings}
-            targets={targets}
-            selectedTarget={selectedTarget}
-            scanning={scanning}
-            health={health}
-            lastPush={lastPush}
-            lastTrigger={lastTrigger}
-            error={scanError}
-            onSettingsChange={updateSettings}
-            onScan={scanComposition}
-            onSelectTarget={(id) => {
-              const target = targets.find((item) => item.id === id) || null;
-              setSelectedTarget(target);
+        <div className="update-banner__actions">
+          <button
+            type="button"
+            className="button button--small button--primary"
+            onClick={() => {
+              if (window.api && window.api.openExternal) {
+                window.api.openExternal(updateInfo.releaseUrl);
+              }
             }}
-            onTest={testSend}
-            ndiStatus={ndiStatus}
-            onToggleNdi={handleToggleNdi}
-            t={t}
-          />
+          >
+            {t('update.downloadBtn')}
+          </button>
+          <button
+            type="button"
+            className="button button--small button--ghost"
+            onClick={() => setUpdateDismissed(true)}
+          >
+            {t('update.dismissBtn')}
+          </button>
         </div>
-      </main>
+      </div>
+    ) : null}
 
-      <footer className="app-footer">
-        <span>{t('footer.note')}</span>
-        {version ? <span>{t('app.version', { version })}</span> : null}
-      </footer>
+    <main className="layout">
+      <div className="layout__left">
+        <TimerDisplay
+          text={rawTimerOutput}
+          color={activeColor}
+          phase={timer.phase}
+          phaseLabel={phaseLabel}
+          modeLabel={modeLabel}
+          progress={timer.progress}
+          isOvertime={timer.isOvertime || (!flashOn && shouldFlash)}
+        />
 
-      <QrisDonateModal open={donateOpen} onClose={() => setDonateOpen(false)} t={t} />
-      <RemoteAccessModal
-        open={remoteOpen}
-        onClose={() => setRemoteOpen(false)}
-        info={remoteInfo}
-        t={t}
-      />
-    </div>
-  );
+        <section className="stat-strip">
+          {stats.map((stat) => (
+            <div key={stat.label} className={`stat ${stat.overtime ? 'stat--overtime' : ''}`}>
+              <span>{stat.label}</span>
+              <strong>{stat.value}</strong>
+            </div>
+          ))}
+          <div className="stat stat--speed">
+            <span>{t('timer.speed')}</span>
+            <strong>{config.speedMultiplier}x</strong>
+          </div>
+        </section>
+
+        <section className="panel output-panel">
+          <div className="panel__header">
+            <h2>{t('app.outputPreview')}</h2>
+            <span className="muted">
+              {settings.enabled
+                ? selectedTarget
+                  ? selectedTarget.scope
+                  : t('resolume.selectTarget')
+                : t('resolume.enabled')}
+            </span>
+          </div>
+          <div className="output-box" style={{ whiteSpace: 'pre-wrap' }}>
+            {effectiveTimerOutput}
+          </div>
+          {config.notesMode === 'separate' && selectedNotesTarget ? (
+            <div style={{ marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+              <span className="muted" style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                {t('notes.target')}: {selectedNotesTarget.scope}
+              </span>
+              <div className="output-box" style={{ marginTop: '6px', fontSize: '14px', whiteSpace: 'pre-wrap', maxHeight: '100px', overflowY: 'auto' }}>
+                {(config.notes || '').trim() || <span className="muted">({t('notes.placeholder')})</span>}
+              </div>
+            </div>
+          ) : null}
+        </section>
+
+        <PresetManager
+          presets={presets}
+          onSave={savePreset}
+          onLoad={loadPreset}
+          onUpdate={updatePreset}
+          onDelete={deletePreset}
+          onExport={exportPresets}
+          onImport={importPresets}
+          importError={presetImportError}
+          t={t}
+        />
+      </div>
+
+      <div className="layout__right">
+        <TimeControls
+          config={config}
+          onChange={updateConfig}
+          onColorChange={updateColor}
+          timer={timer}
+          onManualApply={applyManualTime}
+          targets={targets}
+          selectedNotesTarget={selectedNotesTarget}
+          onSelectNotesTarget={(id) => updateConfig({ notesTargetId: id || null })}
+          onTestNotes={testNotesSend}
+          lastNotesPush={lastNotesPush}
+          screenFlashRemaining={screenFlashRemaining}
+          onTriggerScreenFlash={triggerScreenFlash}
+          onStopScreenFlash={stopScreenFlash}
+          t={t}
+        />
+
+        <OscSettings
+          settings={settings}
+          targets={targets}
+          selectedTarget={selectedTarget}
+          scanning={scanning}
+          health={health}
+          lastPush={lastPush}
+          lastTrigger={lastTrigger}
+          error={scanError}
+          onSettingsChange={updateSettings}
+          onScan={scanComposition}
+          onSelectTarget={(idOrTarget) => {
+            if (typeof idOrTarget === 'object' && idOrTarget !== null) {
+              setSelectedTarget(idOrTarget);
+              return;
+            }
+            const target =
+              (selectedTarget && selectedTarget.id === idOrTarget ? selectedTarget : null) ||
+              targets.find((item) => item.id === idOrTarget) ||
+              null;
+            setSelectedTarget(target);
+          }}
+          onTest={testSend}
+          ndiStatus={ndiStatus}
+          onToggleNdi={handleToggleNdi}
+          t={t}
+        />
+      </div>
+    </main>
+
+    <footer className="app-footer">
+      <span>{t('footer.note')}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {updateStatusMessage ? (
+          <span className="muted" style={{ fontSize: '11px' }}>
+            {updateStatusMessage}
+          </span>
+        ) : null}
+        {version ? (
+          <button
+            type="button"
+            className={`footer-version-btn ${updateInfo && updateInfo.hasUpdate ? 'footer-version-btn--has-update' : ''}`}
+            onClick={() => checkForUpdates(true)}
+            title={updateChecking ? t('update.checking') : t('update.checkManual')}
+            disabled={updateChecking}
+          >
+            {t('app.version', { version })}
+            {updateInfo && updateInfo.hasUpdate ? (
+              <span className="update-pill">{t('update.newVersionBadge', { version: updateInfo.latestVersion })}</span>
+            ) : null}
+          </button>
+        ) : null}
+      </div>
+    </footer>
+
+    <QrisDonateModal open={donateOpen} onClose={() => setDonateOpen(false)} t={t} />
+    <RemoteAccessModal
+      open={remoteOpen}
+      onClose={() => setRemoteOpen(false)}
+      info={remoteInfo}
+      t={t}
+    />
+  </div>
+);
 }

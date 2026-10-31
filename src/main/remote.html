@@ -144,6 +144,24 @@
       box-shadow: 0 0 18px currentColor;
     }
 
+    .stats-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 520px;
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--muted);
+      font-family: Consolas, "SFMono-Regular", monospace;
+    }
+
+    .stats-row strong {
+      color: var(--text);
+    }
+
     .controls {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -289,6 +307,10 @@
     </div>
     <div id="timer" class="timer">00:00:00</div>
     <div class="progress"><div id="progress"></div></div>
+    <div class="stats-row">
+      <span>Elapsed: <strong id="elapsedText">00:00:00</strong></span>
+      <span>Remaining: <strong id="remainingText">00:00:00</strong></span>
+    </div>
   </div>
 
   <div class="controls">
@@ -323,8 +345,23 @@
     </div>
     <textarea id="notesInput" class="notes-box" placeholder="Type notes for the stage, speaker, or Resolume..."></textarea>
     <div class="notes-actions">
+      <button id="clearNotesBtn" type="button" class="btn-small danger" style="padding: 8px 12px;">Clear</button>
       <button id="applyNotesBtn" type="button" class="btn-small" style="background: var(--accent); color: #04110b; border-color: transparent;">Apply Notes</button>
     </div>
+  </div>
+
+  <!-- Stage Attention Alerts section -->
+  <div class="section-card">
+    <div class="section-title">
+      <span>Stage Attention Alert</span>
+      <span id="remoteFlashStatus" style="font-size: 11px; font-weight: 700; color: #ff4d6d;"></span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+      <button type="button" class="btn-small" data-flash-dur="3">Flash 3s</button>
+      <button type="button" class="btn-small" data-flash-dur="5" style="border-color: rgba(255, 77, 109, 0.5); color: #ffb3c1;">Flash 5s</button>
+      <button type="button" class="btn-small" data-flash-dur="10">Flash 10s</button>
+    </div>
+    <button id="stopFlashBtn" type="button" class="btn-small danger" style="display: none; width: 100%; margin-top: 4px;">Stop Screen Flash</button>
   </div>
 
   <p class="hint">Keep this phone on the same Wi-Fi/network as the timer computer.</p>
@@ -341,6 +378,10 @@
     const notesInputEl = document.getElementById('notesInput');
     const notesStatusEl = document.getElementById('notesStatus');
     const applyNotesBtn = document.getElementById('applyNotesBtn');
+    const clearNotesBtn = document.getElementById('clearNotesBtn');
+    const remoteFlashStatusEl = document.getElementById('remoteFlashStatus');
+    const stopFlashBtn = document.getElementById('stopFlashBtn');
+    const flashDurButtons = document.querySelectorAll('[data-flash-dur]');
     const speedButtons = document.querySelectorAll('.speed-btn');
 
     let lastState = null;
@@ -381,6 +422,27 @@
 
       progressEl.style.width = Math.round((Number(state.progress) || 0) * 1000) / 10 + '%';
       progressEl.style.backgroundColor = state.color || '#3ddc97';
+
+      const elapsedEl = document.getElementById('elapsedText');
+      const remainingEl = document.getElementById('remainingText');
+      if (elapsedEl && state.elapsedText) {
+        elapsedEl.textContent = state.elapsedText;
+      }
+      if (remainingEl && state.remainingText) {
+        remainingEl.textContent = state.remainingText;
+      }
+
+      const flashUntil = Number(state.screenFlashUntil) || 0;
+      const isScreenFlashing = flashUntil > Date.now();
+      if (isScreenFlashing) {
+        const secLeft = Math.max(1, Math.ceil((flashUntil - Date.now()) / 1000));
+        if (remoteFlashStatusEl) remoteFlashStatusEl.textContent = `FLASHING (${secLeft}s)`;
+        if (stopFlashBtn) stopFlashBtn.style.display = 'block';
+      } else {
+        if (remoteFlashStatusEl) remoteFlashStatusEl.textContent = '';
+        if (stopFlashBtn) stopFlashBtn.style.display = 'none';
+      }
+
       toggleEl.textContent = state.status === 'running' ? 'Pause' : state.status === 'paused' ? 'Resume' : state.status === 'finished' ? 'Restart' : 'Start';
       toggleEl.dataset.status = state.status || 'idle';
       document.title = (state.text || '00:00:00') + ' - Resolume Timer';
@@ -423,6 +485,19 @@
       });
     });
 
+    flashDurButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        const dur = Number(button.dataset.flashDur) || 5;
+        sendCommand({ action: 'flashScreen', duration: dur });
+      });
+    });
+
+    if (stopFlashBtn) {
+      stopFlashBtn.addEventListener('click', () => {
+        sendCommand({ action: 'stopScreenFlash' });
+      });
+    }
+
     notesInputEl.addEventListener('focus', () => {
       isEditingNotes = true;
       notesStatusEl.textContent = 'Editing...';
@@ -444,6 +519,18 @@
         notesStatusEl.textContent = '';
       }, 2000);
     });
+
+    if (clearNotesBtn) {
+      clearNotesBtn.addEventListener('click', () => {
+        notesInputEl.value = '';
+        sendCommand({ action: 'setNotes', notes: '' });
+        notesStatusEl.textContent = 'Cleared!';
+        isEditingNotes = false;
+        setTimeout(() => {
+          notesStatusEl.textContent = '';
+        }, 2000);
+      });
+    }
 
     poll();
     setInterval(poll, 400);

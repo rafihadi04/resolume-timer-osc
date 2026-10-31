@@ -138,6 +138,18 @@ The app generates OSC address strings matching Resolume Arena's internal generat
 
 Legacy fallback paths (e.g. `/source/blocktext/text`) are also included in the payload for compatibility with older Resolume patches.
 
+### Manual OSC Target Routing
+
+If you cannot enable the REST API or need to route timer messages to a custom OSC address (e.g. into another software, custom OSC bridge, or specific clip slot):
+
+1. In the **Resolume Output** panel, click **Manual OSC** (located next to *Scan composition*).
+2. Type or paste your OSC address path:
+   ```text
+   /composition/layers/1/clips/1/video/source/blocktextgenerator/text
+   ```
+3. Click **Apply** or press Enter.
+4. The target will register as `Custom OSC` and persist in local storage. All timer output will broadcast directly to that OSC path via UDP port `7000`.
+
 ---
 
 ## 4. Multi-Machine Network Setup (FOH to Stage VJ)

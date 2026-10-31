@@ -449,3 +449,69 @@ In GitHub Actions this comes from the repository variable `QR_STATIC`, which the
 - Set `backgroundThrottling: false` in `BrowserWindow` `webPreferences`.
 - Integrated Electron `powerSaveBlocker` to prevent OS sleep/suspension while the timer is running.
 - Upgraded `useTimer.js` with a dual-loop engine: combining `requestAnimationFrame` for smooth foreground rendering with a 50ms interval heartbeat and timestamp delta accumulation (`performance.now()`), guaranteeing continuous and exact timekeeping when the window is minimized.
+
+---
+
+## 11. Feature Updates & UX Fixes (2026-10-31)
+
+### 1. Real-Time Elapsed & Remaining Time Tracking (Decoupled from Playback Speed)
+- Separated virtual timer progression (`elapsedMs`, scaled by `speedMultiplier`) from real-world wall-clock elapsed time (`realElapsedMs`, tracked at unaccelerated 1.0x rate) and real remaining time (`realRemainingMs = remainingMs / speedMultiplier`).
+- When running at higher speeds (e.g. $2.0x$), a 4-minute timer countdown concludes in 2 minutes of real-world presentation time; the dashboard "Elapsed" metric reports `00:02:00` in real time, and "Remaining" displays the actual real time left until time's up (e.g. `05:00` real time for 10 minutes countdown at 2x).
+- Displayed exclusively on the operator dashboard and the LAN remote phone interface (`remote.html`). Output text to Resolume and NDI seamlessly broadcasts the active countdown/timer text and notes without displaying internal operator schedule metrics.
+
+### 2. Quick Adjustment Base Duration Fix
+- Modified `useTimer.js` and `App.jsx` with an `onDurationChange` callback.
+- In `idle` status, quick adjustment buttons (e.g., `+5 min` on a `05:00` timer) directly compute and update the base duration (`10:00`).
+- In `running` or `paused` status, adding time that exceeds elapsed time dynamically expands base duration, preserving all added time.
+
+### 3. Collapsible Manual OSC Target Routing
+- Added a `[Manual OSC]` toggle button in `OscSettings.jsx` that reveals a custom address input only when pressed.
+- Enables pure OSC workflows without requiring REST API discovery.
+- Custom target paths (e.g. `/composition/layers/1/clips/1/video/source/blocktextgenerator/text`) are registered, persisted in localStorage (`rt.target`), and routed via UDP.
+- Added bilingual localization in `en.json` and `id.json`.
+
+### 4. Independent Desktop Panel Scrolling & Layout Stability
+- Locked desktop window to `100vh` with fixed header and footer (`flex: 0 0 auto;`).
+- Left panel (`layout__left`) stays pinned in place so operators never lose sight of active countdown digits.
+- Right panel (`layout__right`) scrolls independently with slim, dark-mode scrollbars.
+- Fixed flexbox compression bug: added `flex-shrink: 0;` to all top-level panel children, preventing `.timer-panel` from being crushed and ensuring `.progress-track` and captions are never cut off.
+
+### 5. Standalone Electron Launch & Dev Auto-Recovery
+- Implemented auto-recovery in `src/main/index.js` for IDE terminals inheriting `ELECTRON_RUN_AS_NODE=1`: detects string `electron`, cleans environment variables, and re-spawns full Electron GUI.
+- Added automatic dev server fallback: running `electron .` or `npm start` without Vite automatically loads `dist-renderer/index.html`.
+- Increased default window height to `920px` for optimal vertical breathing room on standard displays.
+
+---
+
+## 12. Stage Attention Alerts, Notes Flashing & Explicit Send Control (2026-10-31)
+
+### 1. Explicit Notes Send & Clear Button Control (Draft vs Live)
+- Text notes input now uses a draft state buffer (`draftNotes`). Keystrokes are kept private until the operator explicitly presses **Send notes to stage** or `Ctrl+Enter`.
+- Added **Clear notes** button to immediately wipe notes from stage confidence monitors, NDI overlays, and Resolume targets with a single click.
+- Real-time status indicators display `Draft (unsent)` when modifications are pending and `Live on stage` once pushed.
+- External updates (preset loads and mobile remote commands) seamlessly synchronize the draft buffer.
+
+### 2. Notes Text Color Flash (Drawing Speaker Attention)
+- Added toggleable `notesFlash` option in `App.jsx`, presets, and `TimeControls.jsx`.
+- When enabled, notes text and cards on the Web confidence monitor (`/output`) and NDI broadcast feed pulse with dynamic glowing yellow-to-red strobe animations (`@keyframes notes-text-strobe` and `notes-card-pulse`), guaranteeing speaker awareness for critical stage cues.
+
+### 3. Full-Screen Flash Alert Engine
+- Added full-screen strobe overlay (`#flashOverlay`) in `output.html` that commands immediate speaker attention across both physical confidence monitors and NDI video streams.
+- Supported duration presets: `3s`, `5s`, `10s` (or custom up to 60s) with active countdown display and instant **Stop Flash** cancellation button.
+- Fully controllable from both the desktop UI (`TimeControls.jsx`) and mobile LAN remote controller (`remote.html` via `/api/command` action `flashScreen` & `stopScreenFlash`).
+- Architecturally unified: because the NDI offscreen window streams `output.html`, all screen strobes and notes color animations broadcast over NDI automatically with zero performance penalty.
+
+---
+
+## 13. Automated Update Checker & GitHub Releases Integration (2026-10-31)
+
+### 1. GitHub Releases Update Check Engine
+- Added `app:checkUpdate` IPC handler in `src/main/index.js` querying `https://api.github.com/repos/rafihadi04/resolume-timer-osc/releases/latest`.
+- Implemented robust semver parser and comparator (`isNewerVersion`) handling `v`-prefixed tags and multi-segment versions.
+- Automatically executes on startup and exposes a manual check trigger via contextBridge `window.api.checkUpdate()`.
+
+### 2. User Notification & Direct Download Workflow
+- Prominent top banner appears if the installed version is older than latest release, displaying version numbers and a direct **Download update** button linking to the GitHub Release page.
+- Footer displays version information with clickable manual update verification and status feedback.
+- Full bilingual localization in English and Bahasa Indonesia.
+- Version bumped to `1.0.1` in `package.json`.

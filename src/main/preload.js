@@ -18,5 +18,6 @@ contextBridge.exposeInMainWorld('api', {
   ndiStop: () => ipcRenderer.invoke('ndi:stop'),
   setTimerRunning: (running) => ipcRenderer.send('app:setTimerRunning', running),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
-  version: () => ipcRenderer.invoke('app:version')
+  version: () => ipcRenderer.invoke('app:version'),
+  checkUpdate: () => ipcRenderer.invoke('app:checkUpdate')
 });

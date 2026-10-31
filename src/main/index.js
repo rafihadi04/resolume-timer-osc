@@ -1,4 +1,20 @@
-const { app, BrowserWindow, ipcMain, shell, powerSaveBlocker } = require('electron');
+const electron = require('electron');
+
+// Auto-recover if invoked inside an environment where ELECTRON_RUN_AS_NODE=1 is inherited
+if (typeof electron === 'string') {
+  const { spawn } = require('child_process');
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const child = spawn(electron, process.argv.slice(1), {
+    env,
+    stdio: 'inherit',
+    windowsHide: false
+  });
+  child.on('exit', (code) => process.exit(code || 0));
+  return;
+}
+
+const { app, BrowserWindow, ipcMain, shell, powerSaveBlocker } = electron;
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -25,7 +41,7 @@ const remoteReady = new Promise((resolve) => {
   remoteReadyResolve = resolve;
 });
 
-function lanAddresses () {
+function lanAddresses() {
   const found = [];
 
   for (const nets of Object.values(os.networkInterfaces())) {
@@ -46,7 +62,7 @@ function lanAddresses () {
   return [...new Set(found)].sort((a, b) => score(a) - score(b) || a.localeCompare(b));
 }
 
-function getRemoteInfo () {
+function getRemoteInfo() {
   const addresses = lanAddresses();
   const host = addresses[0] || '127.0.0.1';
   const urls = remotePort ? addresses.map((address) => `http://${address}:${remotePort}/`) : [];
@@ -63,21 +79,21 @@ function getRemoteInfo () {
   };
 }
 
-function getRemoteHtml () {
+function getRemoteHtml() {
   if (!remoteHtmlCache) {
     remoteHtmlCache = fs.readFileSync(path.join(__dirname, 'remote.html'), 'utf8');
   }
   return remoteHtmlCache;
 }
 
-function getOutputHtml () {
+function getOutputHtml() {
   if (!outputHtmlCache) {
     outputHtmlCache = fs.readFileSync(path.join(__dirname, 'output.html'), 'utf8');
   }
   return outputHtmlCache;
 }
 
-function startRemoteServer () {
+function startRemoteServer() {
   if (remoteServer) return;
 
   remoteServer = http.createServer((req, res) => {
@@ -139,11 +155,16 @@ function startRemoteServer () {
           return;
         }
 
-        const allowed = ['toggle', 'start', 'pause', 'reset', 'adjust', 'setSpeed', 'setNotes'];
+        const allowed = ['toggle', 'start', 'pause', 'reset', 'adjust', 'setSpeed', 'setNotes', 'flashScreen', 'stopScreenFlash'];
         if (!allowed.includes(command.action)) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'invalid action' }));
           return;
+        }
+
+        if (command.action === 'flashScreen') {
+          const duration = Number(command.duration);
+          command.duration = Number.isFinite(duration) && duration > 0 ? Math.min(60, Math.max(1, duration)) : 5;
         }
 
         if (command.action === 'adjust') {
@@ -196,17 +217,36 @@ function startRemoteServer () {
   });
 }
 
-function toResolumeColor (value) {
+function toResolumeColor(value) {
   const hex = String(value || '').trim().replace(/^#/, '');
   if (/^[0-9a-f]{6}$/i.test(hex)) return `#${hex}ff`;
   if (/^[0-9a-f]{8}$/i.test(hex)) return `#${hex}`;
   return null;
 }
 
-function createWindow () {
+function parseSemver(v) {
+  if (!v) return [0, 0, 0];
+  const clean = String(v).replace(/^v/i, '').trim().split('-')[0];
+  return clean.split('.').map((n) => parseInt(n, 10) || 0);
+}
+
+function isNewerVersion(latest, current) {
+  if (!latest || !current) return false;
+  const l = parseSemver(latest);
+  const c = parseSemver(current);
+  for (let i = 0; i < Math.max(l.length, c.length); i++) {
+    const lPart = l[i] || 0;
+    const cPart = c[i] || 0;
+    if (lPart > cPart) return true;
+    if (lPart < cPart) return false;
+  }
+  return false;
+}
+
+function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
-    height: 880,
+    height: 920,
     minWidth: 980,
     minHeight: 680,
     backgroundColor: '#0b0f14',
@@ -227,7 +267,7 @@ function createWindow () {
 
   mainWindow.on('close', () => {
     ndiService.destroyOffscreenWindow();
-    ndiService.stop().catch(() => {});
+    ndiService.stop().catch(() => { });
   });
 
   mainWindow.on('closed', () => {
@@ -238,8 +278,18 @@ function createWindow () {
     }
   });
 
+  const indexPath = path.join(__dirname, '..', '..', 'dist-renderer', 'index.html');
+  let hasFallenBack = false;
+
   mainWindow.webContents.on('did-fail-load', (_event, code, description, url) => {
     console.error('[renderer] failed to load', code, description, url);
+    if (!hasFallenBack && url && url.includes('5173') && fs.existsSync(indexPath)) {
+      hasFallenBack = true;
+      console.log('[main] Vite dev server not detected, falling back to dist-renderer/index.html');
+      mainWindow.loadFile(indexPath);
+      return;
+    }
+    mainWindow.show();
   });
 
   mainWindow.webContents.on('console-message', (_event, _level, message) => {
@@ -253,16 +303,27 @@ function createWindow () {
     return { action: 'deny' };
   });
 
-  if (isDev) {
-    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173');
+  const devUrl = process.env.ELECTRON_RENDERER_URL || 'http://localhost:5173';
+
+  if (process.env.ELECTRON_RENDERER_URL) {
+    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+  } else if (isDev) {
+    mainWindow.loadURL(devUrl).catch(() => {
+      if (!hasFallenBack && fs.existsSync(indexPath)) {
+        hasFallenBack = true;
+        console.log('[main] Vite dev server not reachable, loading dist-renderer/index.html');
+        mainWindow.loadFile(indexPath);
+      } else {
+        mainWindow.show();
+      }
+    });
   } else {
-    const indexPath = path.join(__dirname, '..', '..', 'dist-renderer', 'index.html');
     console.log('[main] loading renderer from', indexPath);
     mainWindow.loadFile(indexPath);
   }
 }
 
-function registerIpc () {
+function registerIpc() {
   ipcMain.handle('resolume:discover', async (_event, settings) => {
     return restClient.discover(settings || {});
   });
@@ -427,6 +488,37 @@ function registerIpc () {
   });
 
   ipcMain.handle('app:version', () => app.getVersion());
+
+  ipcMain.handle('app:checkUpdate', async () => {
+    const currentVersion = app.getVersion();
+    const repoUrl = 'https://api.github.com/repos/rafihadi04/resolume-timer-osc/releases/latest';
+    try {
+      const response = await fetch(repoUrl, {
+        headers: {
+          'User-Agent': `Resolume-Timer/${currentVersion}`,
+          Accept: 'application/vnd.github.v3+json'
+        }
+      });
+      if (!response.ok) {
+        return { ok: false, error: `GitHub API status ${response.status}`, currentVersion };
+      }
+      const data = await response.json();
+      const latestVersion = data.tag_name || data.name || '';
+      const hasUpdate = isNewerVersion(latestVersion, currentVersion);
+      return {
+        ok: true,
+        currentVersion,
+        latestVersion,
+        hasUpdate,
+        releaseUrl: data.html_url || 'https://github.com/rafihadi04/resolume-timer-osc/releases',
+        releaseName: data.name || latestVersion,
+        releaseNotes: data.body || '',
+        publishedAt: data.published_at || ''
+      };
+    } catch (error) {
+      return { ok: false, error: error.message, currentVersion };
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -444,7 +536,7 @@ app.whenReady().then(() => {
 app.on('before-quit', () => {
   oscClient.close();
   ndiService.destroyOffscreenWindow();
-  ndiService.stop().catch(() => {});
+  ndiService.stop().catch(() => { });
   if (powerSaveBlockerId !== null && powerSaveBlocker.isStarted(powerSaveBlockerId)) {
     powerSaveBlocker.stop(powerSaveBlockerId);
     powerSaveBlockerId = null;

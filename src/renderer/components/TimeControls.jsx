@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatDuration, parseTimeInput } from '../lib/time';
 
-function TimeField ({ label, valueSeconds, onCommit, hint }) {
+function TimeField({ label, valueSeconds, onCommit, hint }) {
   const [text, setText] = useState(formatDuration(valueSeconds));
   const [focused, setFocused] = useState(false);
 
@@ -40,7 +40,7 @@ function TimeField ({ label, valueSeconds, onCommit, hint }) {
   );
 }
 
-function QuickButton ({ children, title, onClick }) {
+function QuickButton({ children, title, onClick }) {
   return (
     <button type="button" className="quick-button" title={title} onClick={onClick}>
       {children}
@@ -48,7 +48,7 @@ function QuickButton ({ children, title, onClick }) {
   );
 }
 
-export default function TimeControls ({
+export default function TimeControls({
   config,
   onChange,
   onColorChange,
@@ -59,10 +59,30 @@ export default function TimeControls ({
   onSelectNotesTarget,
   onTestNotes,
   lastNotesPush,
+  screenFlashRemaining = 0,
+  onTriggerScreenFlash,
+  onStopScreenFlash,
   t
 }) {
   const [manual, setManual] = useState('');
   const [manualError, setManualError] = useState(false);
+  const [draftNotes, setDraftNotes] = useState(config.notes || '');
+
+  useEffect(() => {
+    setDraftNotes(config.notes || '');
+  }, [config.notes]);
+
+  const isNotesDirty = draftNotes !== (config.notes || '');
+  const hasLiveNotes = Boolean((config.notes || '').trim());
+
+  const handleSendNotes = () => {
+    onChange({ notes: draftNotes });
+  };
+
+  const handleClearNotes = () => {
+    setDraftNotes('');
+    onChange({ notes: '' });
+  };
   const speeds = [0.25, 0.5, 1, 1.25, 1.5, 2];
   const speed = Number(config.speedMultiplier) || 1;
   const isCustomSpeed = !speeds.includes(speed);
@@ -214,7 +234,19 @@ export default function TimeControls ({
 
       {/* Stage & Speaker Notes Section */}
       <div className="subsection">
-        <h3>{t('notes.title')}</h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <h3 style={{ margin: 0 }}>{t('notes.title')}</h3>
+          {isNotesDirty ? (
+            <span className="notes-status-badge notes-status-badge--draft">
+              {t('notes.unsent')}
+            </span>
+          ) : hasLiveNotes ? (
+            <span className="notes-status-badge notes-status-badge--live">
+              {t('notes.live')}
+            </span>
+          ) : null}
+        </div>
+
         <label className="field field--wide">
           <textarea
             style={{
@@ -223,7 +255,7 @@ export default function TimeControls ({
               fontFamily: 'inherit',
               padding: '10px 12px',
               background: '#0d141c',
-              border: '1px solid var(--border)',
+              border: isNotesDirty ? '1px solid rgba(255, 204, 0, 0.6)' : '1px solid var(--border)',
               borderRadius: '8px',
               color: 'var(--text)',
               resize: 'vertical',
@@ -231,9 +263,51 @@ export default function TimeControls ({
               lineHeight: '1.4'
             }}
             placeholder={t('notes.placeholder')}
-            value={config.notes || ''}
-            onChange={(event) => onChange({ notes: event.target.value })}
+            value={draftNotes}
+            onChange={(event) => setDraftNotes(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                handleSendNotes();
+              }
+            }}
           />
+        </label>
+
+        <div className="notes-actions-bar">
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              className="button button--primary"
+              onClick={handleSendNotes}
+              disabled={!isNotesDirty && !hasLiveNotes}
+              title="Ctrl+Enter"
+            >
+              {t('notes.send')}
+            </button>
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={handleClearNotes}
+              disabled={!draftNotes && !hasLiveNotes}
+            >
+              {t('notes.clear')}
+            </button>
+          </div>
+          {isNotesDirty ? (
+            <span className="muted" style={{ fontSize: '11px' }}>
+              Ctrl+Enter {t('timer.apply').toLowerCase()}
+            </span>
+          ) : null}
+        </div>
+
+        <label className="checkbox-row" style={{ marginTop: '10px', marginBottom: '6px' }}>
+          <input
+            type="checkbox"
+            checked={Boolean(config.notesFlash)}
+            onChange={(event) => onChange({ notesFlash: event.target.checked })}
+          />
+          <span>{t('notes.flashAlert')}</span>
         </label>
 
         <div className="control-grid" style={{ marginTop: '10px' }}>
@@ -334,6 +408,55 @@ export default function TimeControls ({
               }}
             />
           </label>
+        </div>
+
+        {/* Screen Flash Alert Card */}
+        <div className={`flash-alert-card ${screenFlashRemaining > 0 ? 'flash-alert-card--active' : ''}`}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#ff8099' }}>
+              ⚡ {t('flash.screenTitle')}
+            </span>
+            {screenFlashRemaining > 0 ? (
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#ff4d6d' }}>
+                {t('flash.flashing', { sec: screenFlashRemaining })}
+              </span>
+            ) : null}
+          </div>
+          <p className="muted" style={{ margin: 0, fontSize: '11px', lineHeight: 1.4 }}>
+            {t('flash.screenDesc')}
+          </p>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              type="button"
+              className="button button--small"
+              onClick={() => onTriggerScreenFlash && onTriggerScreenFlash(3)}
+            >
+              {t('flash.screenBtn', { sec: 3 })}
+            </button>
+            <button
+              type="button"
+              className="button button--small"
+              onClick={() => onTriggerScreenFlash && onTriggerScreenFlash(5)}
+            >
+              {t('flash.screenBtn', { sec: 5 })}
+            </button>
+            <button
+              type="button"
+              className="button button--small"
+              onClick={() => onTriggerScreenFlash && onTriggerScreenFlash(10)}
+            >
+              {t('flash.screenBtn', { sec: 10 })}
+            </button>
+            {screenFlashRemaining > 0 ? (
+              <button
+                type="button"
+                className="button button--danger button--small"
+                onClick={() => onStopScreenFlash && onStopScreenFlash()}
+              >
+                {t('flash.stopScreen')}
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
     </section>

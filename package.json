@@ -1,6 +1,6 @@
 {
   "name": "resolume-timer-osc",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Resolume Arena Application Timer",
   "main": "src/main/index.js",
   "scripts": {

@@ -32,6 +32,8 @@ The built-in webserver serves a responsive stage display specifically tailored f
 - **Ultra High-Contrast Digits**: Large monospace timer designed for readability from 30+ feet away.
 - **Dynamic Phase Colors**: Automatically mirrors the active color state (Green = Running, Amber = Warning, Red = Overtime).
 - **Speaker & Stage Notes Card**: Prominently shows notes or announcements pushed from FOH or mobile.
+- **Notes Color Flashing**: When enabled, the notes card and text pulse vigorously with glowing yellow/red strobe animations to ensure the speaker immediately notices crucial cues.
+- **Full-Screen Flash Alert**: When triggered (3s, 5s, 10s), the entire stage screen and NDI output strobe intensely to command the speaker's attention immediately.
 - **Live Progress Bar**: Visual percentage completion bar.
 - **Auto-Reconnection**: If Wi-Fi drops momentarily, the page automatically reconnects without refreshing.
 
@@ -99,7 +101,8 @@ The application includes an interactive mobile remote controller that lets stage
 - **Playback Controls**: Tap **Start**, **Pause**, or **Reset**.
 - **On-the-Fly Adjustments**: Quick buttons for `+1 min`, `-1 min`, `+10 sec`, `-10 sec` without stopping the timer.
 - **Speed Multiplier**: Adjust playback speed between `0.5x`, `1.0x`, `1.25x`, `1.5x`, and `2.0x` for rehearsals or timing adjustments.
-- **Live Notes Editor**: Type speaker notes or stage instructions on your phone and tap **Apply Notes** to instantly update both the desktop app and the stage confidence monitor!
+- **Live Notes Editor**: Type speaker notes or stage instructions on your phone and tap **Apply Notes** (or **Clear**) to push notes to stage monitors and NDI feeds without leaking keystrokes.
+- **Stage Attention Alerts**: Trigger quick full-screen screen flash alerts (`3s`, `5s`, `10s`) directly from your phone to grab speaker attention, with a one-tap **Stop Screen Flash** button.
 
 ---
 

@@ -1,15 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clamp } from '../lib/time';
 
-export function useTimer (config) {
+export function useTimer(config, onDurationChange) {
   const [status, setStatus] = useState('idle');
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [realElapsedMs, setRealElapsedMs] = useState(0);
 
   const statusRef = useRef(status);
   const modeRef = useRef(config.mode);
   const durationRef = useRef(Math.max(0, Number(config.durationSeconds) || 0) * 1000);
   const speedRef = useRef(Number(config.speedMultiplier) || 1);
   const lastTickRef = useRef(performance.now());
+  const onDurationChangeRef = useRef(onDurationChange);
+
+  useEffect(() => {
+    onDurationChangeRef.current = onDurationChange;
+  }, [onDurationChange]);
 
   useEffect(() => {
     statusRef.current = status;
@@ -39,6 +45,7 @@ export function useTimer (config) {
       if (delta > 0) {
         lastTickRef.current = now;
         setElapsedMs((previous) => previous + delta * speedRef.current);
+        setRealElapsedMs((previous) => previous + delta);
       }
     };
 
@@ -115,6 +122,7 @@ export function useTimer (config) {
   const start = useCallback(() => {
     if (statusRef.current === 'finished') {
       setElapsedMs(0);
+      setRealElapsedMs(0);
     }
     setStatus('running');
   }, []);
@@ -136,25 +144,44 @@ export function useTimer (config) {
   const reset = useCallback(() => {
     setStatus('idle');
     setElapsedMs(0);
+    setRealElapsedMs(0);
   }, []);
 
   const adjust = useCallback((deltaSeconds) => {
     const deltaMs = Number(deltaSeconds) * 1000;
     if (!Number.isFinite(deltaMs) || deltaMs === 0) return;
 
-    setElapsedMs((previous) => {
-      let next;
-      if (modeRef.current === 'COUNTUP') {
-        next = previous + deltaMs;
-      } else {
-        next = previous - deltaMs;
+    if (statusRef.current === 'idle') {
+      const currentDurationSec = Math.round(durationRef.current / 1000);
+      const newDurationSec = Math.max(1, currentDurationSec + Number(deltaSeconds));
+      if (typeof onDurationChangeRef.current === 'function') {
+        onDurationChangeRef.current(newDurationSec);
       }
+      setElapsedMs(0);
+      return;
+    }
 
-      if (modeRef.current === 'COUNTDOWN') {
-        return clamp(next, 0, durationRef.current);
-      }
-      return Math.max(0, next);
-    });
+    if (modeRef.current === 'COUNTUP') {
+      setElapsedMs((previous) => Math.max(0, previous + deltaMs));
+    } else {
+      setElapsedMs((previous) => {
+        const next = previous - deltaMs;
+        if (next < 0) {
+          const excessMs = -next;
+          const currentDurationSec = Math.round(durationRef.current / 1000);
+          const addSec = Math.ceil(excessMs / 1000);
+          if (typeof onDurationChangeRef.current === 'function') {
+            onDurationChangeRef.current(currentDurationSec + addSec);
+          }
+          return 0;
+        }
+
+        if (modeRef.current === 'COUNTDOWN') {
+          return clamp(next, 0, durationRef.current);
+        }
+        return next;
+      });
+    }
 
     if (statusRef.current === 'finished') {
       setStatus('paused');
@@ -197,12 +224,18 @@ export function useTimer (config) {
               ? 'warning'
               : 'running';
 
+  const speed = Number(config.speedMultiplier) > 0 ? Number(config.speedMultiplier) : 1;
+  const remainingMs = Math.max(0, remainingRawMs);
+  const realRemainingMs = Math.max(0, Math.round(remainingMs / speed));
+
   return {
     status,
     phase,
     elapsedMs,
+    realElapsedMs,
     displayMs,
-    remainingMs: Math.max(0, remainingRawMs),
+    remainingMs,
+    realRemainingMs,
     overtimeMs: isOvertime ? Math.abs(remainingRawMs) : 0,
     progress,
     isOvertime,

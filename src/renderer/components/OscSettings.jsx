@@ -21,6 +21,35 @@ export default function OscSettings ({
   onToggleNdi,
   t
 }) {
+  const [showManualOsc, setShowManualOsc] = React.useState(false);
+  const [manualOscPath, setManualOscPath] = React.useState(
+    selectedTarget && selectedTarget.isManualOsc ? selectedTarget.oscPath : ''
+  );
+
+  React.useEffect(() => {
+    if (selectedTarget && selectedTarget.isManualOsc && selectedTarget.oscPath) {
+      setManualOscPath(selectedTarget.oscPath);
+    }
+  }, [selectedTarget]);
+
+  const handleApplyManualOsc = () => {
+    let cleanPath = manualOscPath.trim();
+    if (!cleanPath) return;
+    if (!cleanPath.startsWith('/')) {
+      cleanPath = '/' + cleanPath;
+    }
+    const customTarget = {
+      id: `manual_osc_${cleanPath}`,
+      scope: 'Custom OSC',
+      paramName: cleanPath,
+      oscPath: cleanPath,
+      oscPaths: [cleanPath],
+      paramId: null,
+      isManualOsc: true
+    };
+    onSelectTarget(customTarget);
+  };
+
   const restOk = health ? health.rest : null;
   const oscOk = health && health.osc ? health.osc.ok : null;
   const targetOptions =
@@ -152,13 +181,56 @@ export default function OscSettings ({
 
       <div className="subsection">
         <div className="inline-field inline-field--between">
-          <button type="button" className="button" onClick={onScan} disabled={scanning}>
-            {scanning ? t('resolume.scanning') : t('resolume.scan')}
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button type="button" className="button" onClick={onScan} disabled={scanning}>
+              {scanning ? t('resolume.scanning') : t('resolume.scan')}
+            </button>
+            <button
+              type="button"
+              className={`button ${showManualOsc ? 'button--accent' : ''}`}
+              onClick={() => setShowManualOsc((prev) => !prev)}
+            >
+              {showManualOsc ? t('resolume.closeManual') : t('resolume.manualOsc')}
+            </button>
+          </div>
           <span className="muted">
             {targetOptions.length > 0 ? t('resolume.targets', { count: targetOptions.length }) : t('resolume.noTarget')}
           </span>
         </div>
+
+        {showManualOsc ? (
+          <div className="manual-osc-box">
+            <label className="field">
+              <span>{t('resolume.manualOscTitle')}</span>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                <input
+                  type="text"
+                  placeholder="/composition/layers/1/clips/1/video/source/blocktextgenerator/text"
+                  value={manualOscPath}
+                  onChange={(event) => setManualOscPath(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      handleApplyManualOsc();
+                    }
+                  }}
+                  style={{ flex: 1, fontFamily: 'monospace', fontSize: '13px' }}
+                />
+                <button
+                  type="button"
+                  className="button button--accent"
+                  onClick={handleApplyManualOsc}
+                  disabled={!manualOscPath.trim()}
+                >
+                  {t('resolume.apply')}
+                </button>
+              </div>
+              <small className="muted" style={{ display: 'block', marginTop: '4px', fontSize: '12px' }}>
+                {t('resolume.manualOscHint')}
+              </small>
+            </label>
+          </div>
+        ) : null}
 
         <label className="field field--wide">
           <span>{t('resolume.target')}</span>

@@ -183,9 +183,77 @@
     .status-dot.connected {
       background-color: var(--accent);
     }
+
+    .fullscreen-flash-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      pointer-events: none;
+      background-color: #ff0055;
+      opacity: 0;
+      display: none;
+    }
+
+    .fullscreen-flash-overlay.active {
+      display: block;
+      animation: fullscreen-strobe 0.4s infinite alternate ease-in-out;
+    }
+
+    @keyframes fullscreen-strobe {
+      0% {
+        opacity: 0.92;
+        background-color: #ff0055;
+      }
+      50% {
+        opacity: 0.98;
+        background-color: #ffffff;
+      }
+      100% {
+        opacity: 0.25;
+        background-color: #ffcc00;
+      }
+    }
+
+    .notes-card.flashing {
+      border-color: #ff3366 !important;
+      box-shadow: 0 0 45px rgba(255, 51, 102, 0.7) !important;
+      animation: notes-card-pulse 0.8s infinite alternate ease-in-out;
+    }
+
+    .notes-content.flashing {
+      animation: notes-text-strobe 0.8s infinite alternate ease-in-out;
+      font-weight: 800;
+    }
+
+    @keyframes notes-text-strobe {
+      0% {
+        color: #ffffff;
+        text-shadow: 0 0 14px rgba(255, 255, 255, 0.9);
+      }
+      50% {
+        color: #ffeb3b;
+        text-shadow: 0 0 24px rgba(255, 235, 59, 1);
+      }
+      100% {
+        color: #ff1744;
+        text-shadow: 0 0 30px rgba(255, 23, 68, 1);
+      }
+    }
+
+    @keyframes notes-card-pulse {
+      0% {
+        border-color: #ffeb3b;
+        background: rgba(45, 30, 10, 0.95);
+      }
+      100% {
+        border-color: #ff1744;
+        background: rgba(55, 10, 25, 0.98);
+      }
+    }
   </style>
 </head>
 <body>
+  <div class="fullscreen-flash-overlay" id="flashOverlay"></div>
   <div class="output-container">
     <div class="top-bar" id="topBar">
       <div style="display: flex; align-items: center; gap: 10px;">
@@ -233,6 +301,7 @@
     const statusDotEl = document.getElementById('statusDot');
     const notesCardEl = document.getElementById('notesCard');
     const notesContentEl = document.getElementById('notesContent');
+    const flashOverlayEl = document.getElementById('flashOverlay');
 
     let isOnline = false;
 
@@ -257,8 +326,26 @@
       if (!hideNotes && notes.length > 0) {
         notesContentEl.textContent = notes;
         notesCardEl.classList.remove('hidden');
+
+        if (state.notesFlash) {
+          notesCardEl.classList.add('flashing');
+          notesContentEl.classList.add('flashing');
+        } else {
+          notesCardEl.classList.remove('flashing');
+          notesContentEl.classList.remove('flashing');
+        }
       } else {
         notesCardEl.classList.add('hidden');
+        notesCardEl.classList.remove('flashing');
+        notesContentEl.classList.remove('flashing');
+      }
+
+      const flashUntil = Number(state.screenFlashUntil) || 0;
+      const isScreenFlashing = flashUntil > Date.now();
+      if (isScreenFlashing) {
+        flashOverlayEl.classList.add('active');
+      } else {
+        flashOverlayEl.classList.remove('active');
       }
 
       document.title = (state.text || '00:00:00') + ' - Resolume Timer';

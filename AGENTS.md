@@ -54,6 +54,10 @@ The **Resolume Arena Application Timer** is an Electron-based desktop applicatio
     * Effect keys are `textblock`, `texteffect`, or a slug of the effect name.
     * Source targets also include the legacy `/source/blocktext/text` fallback path, and effect targets include the legacy `/effects/textblock/effect/text` fallback path.
   * REST is the verified transport on Arena 7.28. OSC paths above are derived from the official OSC reference (`/composition/.../video/effects/<name>/<param>`) plus the internal names found in Arena (`blocktextgenerator/text`, `textgenerator/text`, `textblock/effect/text`, `texteffect/effect/text`).
+* **Manual OSC Target Routing**:
+  * Collapsible manual OSC address input (`showManualOsc`, `manualOscPath`) displayed only when the user clicks **Manual OSC**.
+  * Allows operators to specify arbitrary OSC address paths (e.g. `/composition/layers/1/clips/1/video/source/blocktextgenerator/text`) without relying on REST discovery.
+  * Persists custom targets in localStorage (`rt.target`) with `isManualOsc: true` and sends timer text via OSC UDP to the specified path.
 * **Health Check & Ping**:
   * Dual health monitor testing both HTTP REST connection and UDP OSC port.
   * UDP cannot be acknowledged, so OSC health means the last UDP send completed without a local socket error.
@@ -99,6 +103,10 @@ The **Resolume Arena Application Timer** is an Electron-based desktop applicatio
 * **Speed Remapper**:
   * Speed multiplier option ($0.25x$, $0.5x$, $1.0x$, $1.25x$, $1.5x$, $2.0x$, or custom multiplier).
   * Accelerates or decelerates timer playback for rehearsals or sped-up media sync.
+* **Real-Time Elapsed & Remaining Time Tracking**:
+  * Separates virtual timer playback progression (`elapsedMs`, scaled by `speedMultiplier`) from true wall-clock time (`realElapsedMs` and `realRemainingMs`, computed against actual seconds).
+  * Example: With a countdown running at $2.0x$ speed, when 4 minutes of timer countdown have elapsed, the operator's real elapsed time correctly shows `02:00` in realtime, and a 10-minute countdown shows `05:00` real remaining time until time's up.
+  * Real-time elapsed and remaining durations are displayed in the desktop software dashboard stats and on the LAN remote phone interface (`remote.html`). Output text to Resolume and NDI seamlessly broadcasts the primary timer text and notes without displaying internal operator metrics.
 
 ---
 
@@ -113,10 +121,12 @@ The **Resolume Arena Application Timer** is an Electron-based desktop applicatio
 
 ### 3.6 Real-Time Time Adjustments & Manual Input
 
-* **Live Action Buttons (When Running)**:
+* **Live Action Buttons**:
   * Quick-add or subtract time on the fly without stopping playback:
     * `+1 hr`, `+5 min`, `+1 min`, `+10 sec`
     * `-1 hr`, `-5 min`, `-1 min`, `-10 sec`
+  * When in `idle` status, quick adjustments directly update the base duration (e.g., `05:00` + `5 min` updates base duration to `10:00`).
+  * When running or paused, adding time that exceeds elapsed time dynamically expands base duration, preserving all added time.
 * **Direct Manual Input**:
   * Text input box accepting explicit time strings (`HH:MM:SS` or total seconds) with instant **Apply / Sync** functionality.
 
@@ -177,6 +187,54 @@ The **Resolume Arena Application Timer** is an Electron-based desktop applicatio
   * The **Remote** button opens a modal with a QR code and URL for phone access.
   * Defaults remain OSC `7000` and REST `8080`.
   * Phone must be on the same Wi-Fi/LAN; Windows Firewall may need to allow the app.
+
+---
+
+### 3.11 Independent Desktop Panel Scrolling & Layout Resilience
+
+* **Independent Panel Scrolling**:
+  * Desktop window locked to `100vh` with fixed header and footer (`flex: 0 0 auto`).
+  * Left panel (`.layout__left`) containing timer digits, controls, stats, and presets stays pinned in place.
+  * Right panel (`.layout__right`) containing detailed controls, Resolume settings, and NDI streams scrolls independently with slim, dark scrollbars.
+  * Panels and cards specify `flex-shrink: 0` to prevent flexbox from squishing contents or clipping the progress bar and captions.
+  * Viewports below `1080px` automatically switch to single-column with natural window scrolling.
+
+---
+
+### 3.12 Standalone Runtime & Dev Fallback
+
+* **Auto-recovery from `ELECTRON_RUN_AS_NODE`**:
+  * Detects when `electron` is executed as plain Node (e.g. from an IDE terminal inheriting `ELECTRON_RUN_AS_NODE=1`), strips the flag, and re-spawns full Electron GUI.
+* **Vite Dev Server Auto-Fallback**:
+  * When running `electron .` or `npm start` without Vite running, automatically falls back to `dist-renderer/index.html`.
+  * When Vite is running (`npm run dev`), automatically connects to `http://localhost:5173` for hot reload.
+
+---
+
+### 3.13 Stage Attention Alerts, Notes Flashing & Explicit Send Control
+
+* **Explicit Notes Send & Clear**:
+  * Notes input uses a draft state buffer (`draftNotes`). Keystrokes are kept private until the operator explicitly presses **Send notes to stage** or `Ctrl+Enter`.
+  * One-click **Clear notes** button wipes stage notes immediately from all targets.
+  * Real-time status badges indicate whether text is currently a pending draft (`Draft (unsent)`) or live on stage (`Live on stage`).
+* **Notes Text Color Flash**:
+  * Toggleable high-visibility color strobe and border pulsation for notes text.
+  * Alternates between bright white, warning yellow, and striking alert red on the Web confidence monitor (`/output`) and NDI broadcast feed to draw the speaker's attention immediately.
+* **Full-Screen Flash Alert**:
+  * Triggers an intense full-screen strobe flash across the entire stage confidence monitor and NDI video overlay for a set duration (3s, 5s, 10s, or custom duration up to 60s).
+  * Can be triggered and cancelled on demand from both desktop controls and mobile LAN remote controller (`remote.html`).
+
+---
+
+### 3.14 Automated GitHub Release Update Checker
+
+* **Update Detection**:
+  * Main process queries the GitHub Releases API (`https://api.github.com/repos/rafihadi04/resolume-timer-osc/releases/latest`) on startup and on demand via IPC `app:checkUpdate`.
+  * Semver comparison engine evaluates whether the latest tag is newer than the currently executing application version.
+* **Non-Intrusive Update Banner**:
+  * Shows a top banner alert if a newer version is detected, indicating current and latest versions with direct **Download update** (external browser link to release page) and **Later** buttons.
+* **Footer Status & Manual Checking**:
+  * Footer displays current version with an update pill badge and allows manual re-checking on click with status feedback.
 
 ---
 

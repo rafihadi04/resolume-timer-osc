@@ -56,12 +56,19 @@ Beyond Resolume, it features **NDI 6 Video Output** (for OBS Studio, vMix, and v
 - **Countdown Mode ($T_{start} \to 00:00:00$)**: Standard countdown from any custom duration.
 - **Count-Up Mode ($00:00:00 \to \infty$)**: Stopwatch and elapsed time tracking.
 - **Countdown then Overtime Mode**: Counts down to zero, triggers the **Time Out** state, and seamlessly begins counting upwards (e.g. `+00:02:15`) so you know exactly how much a speaker has run over schedule.
-- **On-the-Fly Adjustments**: Quick-add or subtract time (`+1 hr`, `+5 min`, `+1 min`, `+10 sec`, `-10 sec`) live without stopping playback.
+- **Real-Time Elapsed & Remaining Tracking**: When running at accelerated playback speeds (e.g. $2.0x$ for rehearsals), the live countdown runs seamlessly at 2x, while the operator's **Elapsed** and **Remaining** stats calculate true wall-clock time (e.g. 10 minutes countdown at 2x displays **05:00** real remaining time until time's up). Displayed on the desktop dashboard and phone remote without altering stage outputs.
+- **On-the-Fly Adjustments**: Quick-add or subtract time (`+1 hr`, `+5 min`, `+1 min`, `+10 sec`, `-10 sec`). In `idle` status, quick adjustments directly update the base duration (`05:00` + `5 min` = `10:00`); while running, added time dynamically expands duration preserving all adjustments.
 - **Speed Remapping**: 0.25x to 2.0x playback speed multiplier for rehearsals or media synchronization.
 
 ### 📝 Stage & Speaker Notes (Dual Output Modes)
+- **Send Notes on Button Press**: Text notes remain in draft while typing and are only sent when clicking **Send notes to stage** (or pressing `Ctrl+Enter`), keeping keystrokes private until ready. Includes a one-click **Clear notes** button.
+- **Notes Color Flash Alert**: Toggleable vibrant color flashing and glowing pulse animation on notes text and borders, immediately grabbing the speaker's attention on stage confidence monitors and NDI feeds.
 - **Mode 1 (`\n` on timer)**: Appends stage notes directly underneath the timer on the same Text Block separated by a newline.
 - **Mode 2 (Separate Text Block)**: Automatically scans your composition for a secondary Text Block target in Resolume and pushes speaker notes to it independently.
+
+### ⚡ Screen Flash & Stage Attention Alerts
+- **Full-Screen Flash Alert**: Triggers an intense, high-impact strobe flash overlay across the entire stage confidence monitor and NDI broadcast feed for a configurable duration (3s, 5s, 10s, or custom).
+- **Dual Triggering**: Instantly activate or stop screen flashing from both desktop controls and mobile remote controller.
 
 ### 📡 NDI 6 Network Video Output
 - Broadcasts the live timer, color state, and notes as an uncompressed, low-latency NDI network stream.
@@ -91,13 +98,20 @@ Beyond Resolume, it features **NDI 6 Video Output** (for OBS Studio, vMix, and v
 - Built-in Chromium background timer throttling bypass and OS-level sleep blocker (`powerSaveBlocker`).
 - High-precision timestamp delta accumulation ensures millisecond accuracy.
 
-### 🎨 Text Block Color Sync & Time's Up Triggers
+### 🎨 Text Block Color Sync, Manual OSC & Triggers
 <p align="center">
   <img src="docs/images/02-resolume-ndi-panel.png" alt="Resolume Output Panel" width="460" />
 </p>
 
 - **Color Sync**: Pushes running, warning, and timeout colors to the Text Block's native `Color` parameter in Resolume Arena as `#rrggbbaa`.
+- **Manual OSC Target Routing**: Collapsible manual OSC input (`[Manual OSC]`) lets operators specify custom OSC address paths directly without requiring REST composition scanning.
 - **Time's Up Actions**: Automatically triggers a clip, column, or group column in Resolume when the timer hits zero.
+
+### 🖥️ Ergonomic Layout & Independent Scrolling
+- **Pinned Left Panel**: The main countdown numbers, live output preview, and preset manager stay firmly pinned in view at all times.
+- **Independent Right Panel Scroll**: Settings, Resolume outputs, and NDI controls scroll smoothly with slim scrollbars without hiding the active timer.
+- **Resilient Layout**: Panels use `flex-shrink: 0` to ensure progress bars, percentage captions, and badges are never squished or clipped.
+- **Update Checker**: Automatically compares local version against the latest GitHub Release and notifies the operator when an update is available with a 1-click download link.
 
 ---
 

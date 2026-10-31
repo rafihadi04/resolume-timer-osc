@@ -109,6 +109,12 @@ You can use either a **Source Clip** or an **Effect**:
 > [!NOTE]
 > If the status badge says **🟢 Connected**, Resolume has acknowledged the REST API connection and is actively listening for live timer updates.
 
+### Alternative: Manual OSC Address Routing
+If you prefer not to use the REST API, or if your network restricts HTTP:
+1. Click the **Manual OSC** button next to *Scan composition*.
+2. Enter your target OSC address (e.g. `/composition/layers/1/clips/1/video/source/blocktextgenerator/text`).
+3. Click **Apply**. The target will register as `Custom OSC` and all timer text will be broadcast directly via OSC UDP.
+
 ---
 
 ## Step 6: Choosing Your Timer Operating Mode
@@ -125,6 +131,9 @@ The app supports 3 distinct timing modes tailored for live productions:
    - Counts down to `00:00:00`.
    - When time expires, it enters the **Time Out** state and seamlessly starts counting upwards with a plus sign (e.g. `+00:02:15`).
    - This lets the stage crew, speaker, and VJ know exactly how many minutes the presenter has run over schedule!
+
+> [!TIP]
+> **Speed Remapping & Real-Time Time Tracking**: You can accelerate playback (e.g. $2.0x$) during technical rehearsals to test stage cues quickly. The **Elapsed** and **Remaining** statistics on your dashboard and mobile remote accurately track true wall-clock time (`00:02:00` elapsed for 4 minutes of 2x playback, and real remaining time until time's up), keeping your real-world schedule intact while outputs broadcast the active rehearsal countdown.
 
 ---
 
