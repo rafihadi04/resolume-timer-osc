@@ -34,10 +34,20 @@ The app runs on your computer, manages precision countdowns and stage notes, and
 
 ## Step 1: Download & Run the Application
 
+### Windows:
 1. Go to the [Releases](https://github.com/rafihadi04/resolume-timer-osc/releases) page on GitHub.
-2. Download the latest Windows Portable `.exe` file (e.g., `Resolume-Timer-1.0.0-win.exe`).
+2. Download the latest Windows Portable `.exe` file (e.g., `Resolume-Timer-1.0.1.exe`).
 3. Double-click the `.exe` to run it. No complex installer or administrative privileges are required.
 4. If Windows Defender SmartScreen appears, click **More info** → **Run anyway**.
+
+### macOS:
+1. Go to the [Releases](https://github.com/rafihadi04/resolume-timer-osc/releases) page on GitHub.
+2. Download the latest `.dmg` or `.zip` file (e.g., `Resolume-Timer-1.0.1.dmg`).
+3. Double-click the `.dmg` file and drag **Resolume Timer** into your **Applications** folder.
+4. Launch **Resolume Timer** from Applications or Spotlight.
+5. **First-time Gatekeeper Note (Unidentified Developer)**:
+   - If macOS blocks the app, right-click (or `Control + click`) `Resolume Timer.app` in Applications and select **Open**, then click **Open** in the confirmation dialog.
+   - Alternatively, open **System Settings** → **Privacy & Security**, scroll down to **Security**, and click **Open Anyway**.
 
 ---
 
