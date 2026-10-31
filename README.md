@@ -1,201 +1,163 @@
-# Resolume Arena Timer
+# Resolume Arena Application Timer
 
-Precision show timer for live visual operators. Runs a countdown, a count-up stopwatch, or a countdown that rolls into overtime, and pushes the live time into Resolume Arena as a Text Block, either over REST or OSC.
+<p align="center">
+  <img src="docs/images/01-full-dashboard.png" alt="Resolume Arena Timer Dashboard" width="900" />
+</p>
 
-Built with Electron + React + Vite. Verified against **Resolume Arena 7.28** on Windows.
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.0-emerald?style=for-the-badge" alt="Version 1.0.0" />
+  <img src="https://img.shields.io/badge/Resolume%20Arena-7.20%20--%207.28+-orange?style=for-the-badge&logo=resolume" alt="Resolume Arena 7.28" />
+  <img src="https://img.shields.io/badge/NDI-6%20SDK%20Native-blue?style=for-the-badge" alt="NDI 6 SDK" />
+  <img src="https://img.shields.io/badge/Electron-30-informational?style=for-the-badge&logo=electron" alt="Electron 30" />
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS-lightgrey?style=for-the-badge" alt="Windows and macOS" />
+</p>
 
 ---
 
-## Features
+## What is Resolume Arena Timer?
 
-- **Three timer modes** — countdown, count-up, countdown then overtime (`+00:02:15`).
-- **Live Resolume output** — finds Text Block sources and Text Block effects anywhere in the composition and streams the timer text to them.
-- **Notes Output with 2 modes**:
-  - **Mode 1 (`\n` on timer)** — Appends speaker/stage notes to the timer string separated by a newline on the same Text Block.
-  - **Mode 2 (Separate Text Block)** — Scans the composition and pushes notes to a separate Text Block target in Resolume.
-- **NDI Output** — Broadcasts the live timer, color state, and notes as a high-definition NDI network video stream (NDI 6 SDK native addon) for OBS Studio, vMix, Tricaster, or Resolume Arena. Supports transparency and configurable framerates.
-- **Website Timer Output with notes (`/output`)** — Full-screen responsive web display for stage confidence monitors, presenter displays, or OBS/Resolume browser sources. Supports `?transparent=1` for video overlays.
-- **Synchronized Phone Remote** — LAN remote controller now synchronizes both playback speed (0.5x–2.0x) and live stage notes editing between mobile devices and desktop.
-- **Rock-solid Background Running** — Timer never stops, freezes, or desyncs when minimized or running in the background. Configured with Chromium background throttling bypass, timestamp delta tracking, and OS sleep prevention.
-- **REST + OSC** — Auto / REST only / OSC only. REST is the verified transport; OSC is a fallback and is sent only when enabled in Resolume preferences.
-- **Color sync** — pushes the running / warning / timeout color to the Text Block `Color` parameter.
-- **Time's up actions** — optionally triggers a clip, a column, or a group column when the timer hits zero. Disabled by default.
-- **Warning threshold and flashing message** — swaps the display between the overtime count and a custom message (e.g. `TIME'S UP`) at a configurable rate.
-- **Live adjustments** — `+1 hr` … `-10 sec` without stopping the timer, plus a manual `HH:MM:SS` input.
-- **Speed remapping** — 0.25x to 2.0x or a custom multiplier.
-- **Presets** — save, edit, load, delete, export, import.
-- **Languages** — English and Bahasa Indonesia.
-- **Donate** — QRIS-only donation QR.
+**Resolume Arena Application Timer** is an open-source, desktop show timer built specifically for live event visual operators (VJs), stage managers, church media directors, and broadcast technicians.
+
+It manages precision countdowns, count-ups, and overtime tracking, and automatically feeds the formatted time and color status directly into **Resolume Arena** as a **Text Block** (via REST API or OSC).
+
+Beyond Resolume, it features **NDI 6 Video Output** (for OBS Studio, vMix, and video switchers), a full-screen **Web Confidence Monitor** for downstage presenter screens, and an interactive **Smartphone Remote Control** operating over local Wi-Fi.
+
+---
+
+## ⚡ Quick Start in 3 Minutes
+
+1. **Enable Resolume Webserver**:
+   - In Resolume Arena, open **Arena** → **Preferences** → **Webserver**.
+   - Check **Enabled** (default port `8080`).
+2. **Add a Text Block in Resolume**:
+   - Under **Sources** → **Generators**, drag **Text Block** into an empty clip slot on any layer.
+3. **Connect & Sync**:
+   - Open **Resolume Timer**. In the **Resolume Output** panel on the right, click **Scan composition**.
+   - Pick your Text Block clip from the dropdown, check **Send timer text to Resolume**, and start your timer!
+
+👉 *For a complete beginner tutorial with screenshots, check the [Step-by-Step Setup Guide](docs/SETUP_GUIDE.md).*
+
+---
+
+## 📚 Complete Documentation
+
+| Guide | Description |
+| --- | --- |
+| 📖 **[Beginner's Setup Guide](docs/SETUP_GUIDE.md)** | Step-by-step tutorial from downloading to connecting your first Text Block in Resolume. |
+| 🖥️ **[Stage Confidence Monitor & NDI Guide](docs/STAGE_NDI_GUIDE.md)** | How to use full-screen web confidence monitors, OBS transparent overlays, and NDI streams. |
+| ⚡ **[Resolume Technical & OSC Reference](docs/RESOLUME_GUIDE.md)** | In-depth breakdown of the Resolume REST API (`/api/v1/composition`), parameter IDs, and OSC paths. |
+| 🔧 **[Troubleshooting & FAQ](docs/TROUBLESHOOTING.md)** | Solutions for connection issues, firewall setup, scanned targets, and common questions. |
+
+---
+
+## Key Features
+
+### ⏱️ Precision Timer Engine & Modes
+- **Countdown Mode ($T_{start} \to 00:00:00$)**: Standard countdown from any custom duration.
+- **Count-Up Mode ($00:00:00 \to \infty$)**: Stopwatch and elapsed time tracking.
+- **Countdown then Overtime Mode**: Counts down to zero, triggers the **Time Out** state, and seamlessly begins counting upwards (e.g. `+00:02:15`) so you know exactly how much a speaker has run over schedule.
+- **On-the-Fly Adjustments**: Quick-add or subtract time (`+1 hr`, `+5 min`, `+1 min`, `+10 sec`, `-10 sec`) live without stopping playback.
+- **Speed Remapping**: 0.25x to 2.0x playback speed multiplier for rehearsals or media synchronization.
+
+### 📝 Stage & Speaker Notes (Dual Output Modes)
+- **Mode 1 (`\n` on timer)**: Appends stage notes directly underneath the timer on the same Text Block separated by a newline.
+- **Mode 2 (Separate Text Block)**: Automatically scans your composition for a secondary Text Block target in Resolume and pushes speaker notes to it independently.
+
+### 📡 NDI 6 Network Video Output
+- Broadcasts the live timer, color state, and notes as an uncompressed, low-latency NDI network stream.
+- Automatically detected by Resolume Arena, OBS Studio, vMix, and Tricaster without capture cards.
+- Configurable stream name, framerate (30 or 60 FPS), and 32-bit BGRA alpha transparency for keying over stage visuals.
+
+### 🖥️ Full-Screen Web Confidence Monitor (`/output`)
+<p align="center">
+  <img src="docs/images/04-web-confidence-monitor.png" alt="Web Confidence Monitor" width="850" />
+</p>
+
+- Clean, high-contrast responsive display served at `http://<lan-ip>:<port>/output` for stage TVs, lectern tablets, and iPads.
+- Dynamic color transitions (Green = Running, Amber = Warning threshold, Red = Overtime).
+- Transparent video overlay mode: append `?transparent=1` for OBS Studio and vMix Browser Sources.
+
+### 📱 Wireless Smartphone Remote Control (`/`)
+<p align="center">
+  <img src="docs/images/05-phone-remote.png" alt="Phone Remote Controller" width="340" />
+</p>
+
+- Click the **Remote** button in the header to view a QR code and instant LAN link.
+- Scan with any smartphone or tablet on the same Wi-Fi.
+- Wirelessly start, pause, reset, adjust time, toggle playback speed (0.5x–2.0x), and edit stage notes live from backstage or FOH.
+
+### 🛡️ Rock-Solid Background Running
+- Never freezes, stops, or desyncs when minimized, unfocused, or running on another virtual desktop.
+- Built-in Chromium background timer throttling bypass and OS-level sleep blocker (`powerSaveBlocker`).
+- High-precision timestamp delta accumulation ensures millisecond accuracy.
+
+### 🎨 Text Block Color Sync & Time's Up Triggers
+<p align="center">
+  <img src="docs/images/02-resolume-ndi-panel.png" alt="Resolume Output Panel" width="460" />
+</p>
+
+- **Color Sync**: Pushes running, warning, and timeout colors to the Text Block's native `Color` parameter in Resolume Arena as `#rrggbbaa`.
+- **Time's Up Actions**: Automatically triggers a clip, column, or group column in Resolume when the timer hits zero.
+
+---
+
+## Resolume Connection Setup
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| **REST Host** | `127.0.0.1` | Local machine IP (or LAN IP if Resolume is on a separate media server) |
+| **REST Port** | `8080` | Resolume Webserver port (Preferences → Webserver) |
+| **OSC Host** | `127.0.0.1` | OSC target host |
+| **OSC Port** | `7000` | Resolume OSC Input port (Preferences → OSC) |
+| **Send Mode** | `Auto` | Prioritizes verified REST API, falls back to OSC |
+
+Text is written to Resolume using `PUT /api/v1/parameter/by-id/{id}`. For multi-machine setups, see the [Resolume Reference Guide](docs/RESOLUME_GUIDE.md).
 
 ---
 
 ## Requirements
 
-- Node.js 20+
-- Resolume Arena (tested on 7.28) with the REST API enabled
-- Resolume OSC input enabled if you want OSC delivery (Preferences → OSC → Input, default port `7000`)
+- **Operating System**: Windows 10/11 (64-bit) or macOS (12+).
+- **Resolume Arena**: 7.20 through 7.28+ with Webserver enabled.
+- **Node.js**: v20+ (for source development and building).
 
 ---
 
-## Development
+## Development & Building
+
+### Run Locally
 
 ```powershell
 npm install
 npm run dev
 ```
 
-`npm run dev` starts Vite on port `5173` and launches Electron against the dev server.
+`npm run dev` starts the Vite dev server on port `5173` and launches Electron against it.
 
-## Build
-
-```powershell
-npm run build              # renderer only -> dist-renderer/
-npm run build:win-portable # Windows portable exe
-npm run build:release      # current platform only
-```
-
-On a machine without the Windows symlink privilege, electron-builder fails while extracting `winCodeSign`. Use:
+### Build Executables
 
 ```powershell
-npm run build:win-portable:local
+npm run build              # Builds React renderer -> dist-renderer/
+npm run build:win-portable # Builds standalone Windows portable executable
+npm run build:release      # Builds release binaries for current platform
 ```
 
-Artifacts land in `dist/`.
+Artifacts are saved in `dist/`.
 
 ---
 
-## Resolume setup
+## Support This Project (QRIS Donation)
 
-1. In Resolume enable **Preferences → Webserver / REST API** (default port `8080`).
-2. Add a **Text Block** source clip or a **Text Block** effect to the composition.
-3. In the app, open the Resolume panel, keep host `127.0.0.1` and REST port `8080`, then press **Scan composition**.
-4. Pick the target and enable **Send timer text**.
-
-Defaults:
-
-| Setting | Default |
-| --- | --- |
-| REST host | `127.0.0.1` |
-| REST port | `8080` |
-| OSC host | `127.0.0.1` |
-| OSC port | `7000` |
-
-Text is written with `PUT /api/v1/parameter/by-id/{id}`. If you point the app at another machine, use that machine's LAN IP for both REST and OSC.
-
-### OSC paths
-
-OSC input must be enabled in Resolume, otherwise messages are silently ignored — UDP has no acknowledgement.
-
-| Target | Path |
-| --- | --- |
-| Text Block source | `/composition/layers/{layer}/clips/{clip}/video/source/blocktextgenerator/text` |
-| Text Animator source | `/composition/layers/{layer}/clips/{clip}/video/source/textgenerator/text` |
-| Clip effect | `/composition/layers/{layer}/clips/{clip}/video/effects/{effect}/effect/text` |
-| Layer effect | `/composition/layers/{layer}/video/effects/{effect}/effect/text` |
-| Composition effect | `/composition/video/effects/{effect}/effect/text` |
-
----
-
-## Donation QR (QRIS)
-
-The Donate button opens a modal that renders a QR from a static QRIS payload compiled into the renderer. The payload is **never committed**; it is read at build time from an environment variable.
-
-Local builds read `.env.local` (git-ignored):
-
-```ini
-VITE_QR_STATIC=00020101021126610014COM.GO-JEK.WWW...
-VITE_QRIS_STATIC=00020101021126610014COM.GO-JEK.WWW...
-```
-
-Or set it inline before building:
-
-```powershell
-$env:VITE_QR_STATIC = '0002010102112661...'
-npm run build:win-portable:local
-```
-
-GitHub Actions reads the repository variable **`QR_STATIC`** and passes it to Vite as both `VITE_QR_STATIC` and `VITE_QRIS_STATIC`. Add it under **Settings → Secrets and variables → Actions → Variables** so release builds ship a working QR. If the payload is empty, the modal shows "Donation QRIS is not configured in this build" instead of a fake QR.
-
-The donation is QRIS only — an Indonesian payment QR. No other payment methods are supported.
-
----
-
-## Support this project
-
-If this timer saves you time on a show, you can support continued development with a QRIS donation. Any Indonesian banking or e-wallet app that supports QRIS can scan this.
+If this software helps your live shows, events, or church services, you can support ongoing development with an Indonesian **QRIS** donation. Any Indonesian mobile banking or e-wallet app (GoPay, OVO, DANA, ShopeePay, LinkAja, BCA, Mandiri, etc.) can scan this code:
 
 <p align="center">
-  <img src="assets/donate-qris.png" alt="QRIS donation QR code" width="320" />
+  <img src="assets/donate-qris.png" alt="QRIS Donation QR" width="300" />
 </p>
 
-<p align="center"><strong>QRIS only</strong> — scan with GoPay, OVO, DANA, ShopeePay, LinkAja, or any Indonesian mobile banking app.</p>
+<p align="center"><strong>QRIS only</strong> — thank you for your support!</p>
 
 ---
 
----
+## License
 
-## Remote timer (phone)
-
-The main process starts an HTTP server on an OS-assigned free port and the **Remote** button shows a QR plus the LAN URL.
-
-- Phone must be on the same Wi-Fi / LAN as the computer.
-- Allow the app through Windows Firewall if the page does not load.
-- The remote page mirrors the timer (text, phase, mode, progress, speed, notes) and can start/pause, reset, adjust by ±1 min / ±10 sec, change playback speed, and edit stage notes live.
-- If more than one network interface exists, the modal lists alternate addresses.
-- The **Remote Access Modal** includes tabs for both the **Remote Controller** (`/`) and the **Website Timer Output** (`/output`).
-
----
-
-## Website Timer Output (`/output`)
-
-The application serves a dedicated, full-screen stage and confidence monitor display at `http://<lan-ip>:<port>/output` (or `/stage`, `/timer`, `/view`):
-
-- **Clean stage display** — Large high-contrast digits, active color indication, mode/phase badge, progress bar, and speaker notes section.
-- **Video switcher & OBS overlay** — Append `?transparent=1` for a transparent background.
-- **Customizable view** — Use `?notes=hide` to hide notes, or `?top=hide` for minimal timer only.
-
----
-
-## NDI Output
-
-Broadcasts the timer and notes as an NDI video feed across the local network:
-
-- Enabled in the **Resolume Output** panel under **NDI Output**.
-- Uses native Vizrt/NewTek NDI 6 SDK.
-- Automatically detected by Resolume Arena, OBS Studio, vMix, and Tricaster as a network video source.
-- Configurable stream name, framerate (30 / 60 FPS), and alpha transparency.
-
----
-
-## Project layout
-
-```text
-src/
-├── main/
-│   ├── index.js          Electron main process, IPC, LAN remote server, power saver
-│   ├── preload.js        contextBridge API
-│   ├── ndi-service.js    NDI 6 SDK broadcast service & offscreen renderer
-│   ├── osc-client.js     OSC UDP encoder
-│   ├── remote.html       Phone remote controller page (with speed & notes)
-│   ├── output.html       Full-screen web timer output with notes
-│   └── rest-client.js    Resolume discovery and updates
-└── renderer/
-    ├── main.jsx          React entry point
-    ├── App.jsx           UI and state management
-    ├── styles.css
-    ├── i18n.js
-    ├── hooks/useTimer.js Background-safe precision timer hook
-    ├── lib/              time formatting, QR helper
-    ├── components/       Timer, controls, Resolume & NDI settings, presets, modals
-    └── locales/          en.json, id.json
-```
-
-`dist-renderer/` is the Vite output and is packaged into `app.asar`. `dist/` is electron-builder output and is excluded from the asar.
-
----
-
-## Notes
-
-- Saving or destructive changes to a live Resolume composition always require explicit confirmation; the app only writes the text/color parameters and, if enabled, fires the connect endpoints.
-- OSC health in the app means "the last UDP send completed locally", not confirmed receipt.
-- `assets/icon.ico` is currently a PNG, so packaged builds use the default Electron icon.
+This project is licensed under the [MIT License](LICENSE).
